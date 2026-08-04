@@ -1,0 +1,13 @@
+{
+  "default_profile": "default",
+  "profiles": {
+    "default": {
+      "base_url": "https://secure.sakura.ad.jp/cloud/api/iam/1.0/",
+      "project_id": "123456789012",
+      "service_principal_id": "123456789012",
+      "kid": "REPLACE_WITH_EXISTING_KEY_KID",
+      "private_key": "/absolute/path/to/existing.private.pem"
+    }
+  }
+}
+
