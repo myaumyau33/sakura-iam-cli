@@ -222,6 +222,535 @@ def list_service_principal_keys(
     )
 
 
+def list_project_api_keys(
+    profile: Profile,
+    token: str,
+    *,
+    page: int | None = None,
+    per_page: int | None = None,
+    ordering: str | None = None,
+) -> dict[str, Any]:
+    return request_iam(
+        profile,
+        token,
+        "GET",
+        "compat/api-keys",
+        query={"page": page, "per_page": per_page, "ordering": ordering},
+    )
+
+
+def create_project_api_key(
+    profile: Profile,
+    token: str,
+    project_id: str,
+    name: str,
+    description: str,
+    iam_roles: list[str],
+    server_resource_id: str | None = None,
+    zone_id: str | None = None,
+) -> dict[str, Any]:
+    body: dict[str, Any] = {
+        "project_id": int(project_id),
+        "name": name,
+        "description": description,
+        "iam_roles": iam_roles,
+    }
+    if server_resource_id is not None:
+        body["server_resource_id"] = server_resource_id
+    if zone_id is not None:
+        body["zone_id"] = zone_id
+    return request_iam(profile, token, "POST", "compat/api-keys", json_body=body)
+
+
+def read_project_api_key(
+    profile: Profile, token: str, api_key_id: str
+) -> dict[str, Any]:
+    return request_iam(
+        profile,
+        token,
+        "GET",
+        f"compat/api-keys/{urllib.parse.quote(api_key_id, safe='')}",
+    )
+
+
+def update_project_api_key(
+    profile: Profile,
+    token: str,
+    api_key_id: str,
+    name: str,
+    description: str,
+    iam_roles: list[str],
+    server_resource_id: str | None = None,
+    zone_id: str | None = None,
+) -> dict[str, Any]:
+    body: dict[str, Any] = {
+        "name": name,
+        "description": description,
+        "iam_roles": iam_roles,
+    }
+    if server_resource_id is not None:
+        body["server_resource_id"] = server_resource_id
+    if zone_id is not None:
+        body["zone_id"] = zone_id
+    return request_iam(
+        profile,
+        token,
+        "PUT",
+        f"compat/api-keys/{urllib.parse.quote(api_key_id, safe='')}",
+        json_body=body,
+    )
+
+
+def delete_project_api_key(profile: Profile, token: str, api_key_id: str) -> None:
+    request_iam(
+        profile,
+        token,
+        "DELETE",
+        f"compat/api-keys/{urllib.parse.quote(api_key_id, safe='')}",
+    )
+
+
+def list_iam_roles(
+    profile: Profile,
+    token: str,
+    *,
+    page: int | None = None,
+    per_page: int | None = None,
+) -> dict[str, Any]:
+    return request_iam(
+        profile,
+        token,
+        "GET",
+        "iam-roles",
+        query={"page": page, "per_page": per_page},
+    )
+
+
+def read_iam_role(profile: Profile, token: str, iam_role_id: str) -> dict[str, Any]:
+    return request_iam(
+        profile,
+        token,
+        "GET",
+        f"iam-roles/{urllib.parse.quote(iam_role_id, safe='')}",
+    )
+
+
+def list_projects(
+    profile: Profile,
+    token: str,
+    *,
+    page: int | None = None,
+    per_page: int | None = None,
+    ordering: str | None = None,
+    iam_roles: list[str] | None = None,
+    parent_folder_id: str | None = None,
+) -> dict[str, Any]:
+    return request_iam(
+        profile,
+        token,
+        "GET",
+        "projects",
+        query={
+            "page": page,
+            "per_page": per_page,
+            "ordering": ordering,
+            "iam_role": None if not iam_roles else ",".join(iam_roles),
+            "parent_folder_id": parent_folder_id,
+        },
+    )
+
+
+def create_project(
+    profile: Profile,
+    token: str,
+    code: str,
+    name: str,
+    description: str,
+    parent_folder_id: str | None = None,
+) -> dict[str, Any]:
+    body: dict[str, Any] = {"code": code, "name": name, "description": description}
+    if parent_folder_id is not None:
+        body["parent_folder_id"] = int(parent_folder_id)
+    return request_iam(profile, token, "POST", "projects", json_body=body)
+
+
+def read_project(profile: Profile, token: str, project_id: str) -> dict[str, Any]:
+    return request_iam(
+        profile,
+        token,
+        "GET",
+        f"projects/{urllib.parse.quote(project_id, safe='')}",
+    )
+
+
+def update_project(
+    profile: Profile,
+    token: str,
+    project_id: str,
+    name: str,
+    description: str,
+) -> dict[str, Any]:
+    return request_iam(
+        profile,
+        token,
+        "PUT",
+        f"projects/{urllib.parse.quote(project_id, safe='')}",
+        json_body={"name": name, "description": description},
+    )
+
+
+def delete_project(profile: Profile, token: str, project_id: str) -> None:
+    request_iam(
+        profile,
+        token,
+        "DELETE",
+        f"projects/{urllib.parse.quote(project_id, safe='')}",
+    )
+
+
+def move_projects(
+    profile: Profile,
+    token: str,
+    project_ids: list[str],
+    parent_folder_id: str | None,
+) -> None:
+    request_iam(
+        profile,
+        token,
+        "POST",
+        "move-projects",
+        json_body={
+            "project_ids": [int(project_id) for project_id in project_ids],
+            "parent_folder_id": None if parent_folder_id is None else int(parent_folder_id),
+        },
+    )
+
+
+def list_folders(
+    profile: Profile,
+    token: str,
+    *,
+    page: int | None = None,
+    per_page: int | None = None,
+    folder_name: str | None = None,
+    parent_id: str | None = None,
+) -> dict[str, Any]:
+    return request_iam(
+        profile,
+        token,
+        "GET",
+        "folders",
+        query={
+            "page": page,
+            "per_page": per_page,
+            "folder_name": folder_name,
+            "parent_id": parent_id,
+        },
+    )
+
+
+def create_folder(
+    profile: Profile,
+    token: str,
+    name: str,
+    description: str,
+    parent_id: str | None = None,
+) -> dict[str, Any]:
+    body: dict[str, Any] = {"name": name, "description": description}
+    if parent_id is not None:
+        body["parent_id"] = int(parent_id)
+    return request_iam(profile, token, "POST", "folders", json_body=body)
+
+
+def read_folder(profile: Profile, token: str, folder_id: str) -> dict[str, Any]:
+    return request_iam(
+        profile,
+        token,
+        "GET",
+        f"folders/{urllib.parse.quote(folder_id, safe='')}",
+    )
+
+
+def update_folder(
+    profile: Profile,
+    token: str,
+    folder_id: str,
+    name: str,
+    description: str,
+) -> dict[str, Any]:
+    return request_iam(
+        profile,
+        token,
+        "PUT",
+        f"folders/{urllib.parse.quote(folder_id, safe='')}",
+        json_body={"name": name, "description": description},
+    )
+
+
+def delete_folder(profile: Profile, token: str, folder_id: str) -> None:
+    request_iam(
+        profile,
+        token,
+        "DELETE",
+        f"folders/{urllib.parse.quote(folder_id, safe='')}",
+    )
+
+
+def move_folders(
+    profile: Profile,
+    token: str,
+    folder_ids: list[str],
+    parent_id: str | None,
+) -> None:
+    request_iam(
+        profile,
+        token,
+        "POST",
+        "move-folders",
+        json_body={
+            "folder_ids": [int(folder_id) for folder_id in folder_ids],
+            "parent_id": None if parent_id is None else int(parent_id),
+        },
+    )
+
+
+def list_groups(
+    profile: Profile,
+    token: str,
+    *,
+    page: int | None = None,
+    per_page: int | None = None,
+    ordering: str | None = None,
+    user_id: str | None = None,
+) -> dict[str, Any]:
+    return request_iam(
+        profile,
+        token,
+        "GET",
+        "groups",
+        query={
+            "page": page,
+            "per_page": per_page,
+            "ordering": ordering,
+            "compat_user_id": user_id,
+        },
+    )
+
+
+def create_group(
+    profile: Profile, token: str, name: str, description: str
+) -> dict[str, Any]:
+    return request_iam(
+        profile,
+        token,
+        "POST",
+        "groups",
+        json_body={"name": name, "description": description},
+    )
+
+
+def read_group(profile: Profile, token: str, group_id: str) -> dict[str, Any]:
+    return request_iam(
+        profile, token, "GET", f"groups/{urllib.parse.quote(group_id, safe='')}"
+    )
+
+
+def update_group(
+    profile: Profile, token: str, group_id: str, name: str, description: str
+) -> dict[str, Any]:
+    return request_iam(
+        profile,
+        token,
+        "PUT",
+        f"groups/{urllib.parse.quote(group_id, safe='')}",
+        json_body={"name": name, "description": description},
+    )
+
+
+def delete_group(profile: Profile, token: str, group_id: str) -> None:
+    request_iam(
+        profile, token, "DELETE", f"groups/{urllib.parse.quote(group_id, safe='')}"
+    )
+
+
+def list_group_memberships(
+    profile: Profile, token: str, group_id: str
+) -> dict[str, Any]:
+    return request_iam(
+        profile,
+        token,
+        "GET",
+        f"groups/{urllib.parse.quote(group_id, safe='')}/memberships",
+    )
+
+
+def update_group_memberships(
+    profile: Profile, token: str, group_id: str, user_ids: list[str]
+) -> dict[str, Any]:
+    return request_iam(
+        profile,
+        token,
+        "PUT",
+        f"groups/{urllib.parse.quote(group_id, safe='')}/memberships",
+        json_body={"compat_users": [{"id": int(user_id)} for user_id in user_ids]},
+    )
+
+
+def list_users(
+    profile: Profile,
+    token: str,
+    *,
+    page: int | None = None,
+    per_page: int | None = None,
+    ordering: str | None = None,
+) -> dict[str, Any]:
+    return request_iam(
+        profile,
+        token,
+        "GET",
+        "compat/users",
+        query={"page": page, "per_page": per_page, "ordering": ordering},
+    )
+
+
+def create_user(
+    profile: Profile,
+    token: str,
+    name: str,
+    code: str,
+    password: str,
+    description: str,
+    email: str | None = None,
+) -> dict[str, Any]:
+    body = {"name": name, "code": code, "password": password, "description": description}
+    if email is not None:
+        body["email"] = email
+    return request_iam(profile, token, "POST", "compat/users", json_body=body)
+
+
+def read_user(profile: Profile, token: str, user_id: str) -> dict[str, Any]:
+    return request_iam(
+        profile, token, "GET", f"compat/users/{urllib.parse.quote(user_id, safe='')}"
+    )
+
+
+def update_user(
+    profile: Profile,
+    token: str,
+    user_id: str,
+    name: str,
+    description: str,
+    password: str | None = None,
+) -> dict[str, Any]:
+    body = {"name": name, "description": description}
+    if password is not None:
+        body["password"] = password
+    return request_iam(
+        profile,
+        token,
+        "PUT",
+        f"compat/users/{urllib.parse.quote(user_id, safe='')}",
+        json_body=body,
+    )
+
+
+def delete_user(profile: Profile, token: str, user_id: str) -> None:
+    request_iam(
+        profile, token, "DELETE", f"compat/users/{urllib.parse.quote(user_id, safe='')}"
+    )
+
+
+def register_user_email(profile: Profile, token: str, user_id: str, email: str) -> None:
+    request_iam(
+        profile,
+        token,
+        "POST",
+        f"compat/users/{urllib.parse.quote(user_id, safe='')}/register-email",
+        json_body={"email": email},
+    )
+
+
+def unregister_user_email(profile: Profile, token: str, user_id: str) -> None:
+    request_iam(
+        profile,
+        token,
+        "POST",
+        f"compat/users/{urllib.parse.quote(user_id, safe='')}/unregister-email",
+    )
+
+
+def deactivate_user_otp(profile: Profile, token: str, user_id: str) -> None:
+    request_iam(
+        profile,
+        token,
+        "POST",
+        f"compat/users/{urllib.parse.quote(user_id, safe='')}/deactivate-otp",
+    )
+
+
+def list_trusted_devices(profile: Profile, token: str, user_id: str) -> dict[str, Any]:
+    return request_iam(
+        profile,
+        token,
+        "GET",
+        f"compat/users/{urllib.parse.quote(user_id, safe='')}/trusted-devices",
+    )
+
+
+def delete_trusted_device(
+    profile: Profile, token: str, user_id: str, trusted_device_id: str
+) -> None:
+    request_iam(
+        profile,
+        token,
+        "DELETE",
+        f"compat/users/{urllib.parse.quote(user_id, safe='')}/trusted-devices/"
+        f"{urllib.parse.quote(trusted_device_id, safe='')}",
+    )
+
+
+def clear_trusted_devices(profile: Profile, token: str, user_id: str) -> None:
+    request_iam(
+        profile,
+        token,
+        "POST",
+        f"compat/users/{urllib.parse.quote(user_id, safe='')}/clear-trusted-devices",
+    )
+
+
+def list_security_keys(profile: Profile, token: str, user_id: str) -> dict[str, Any]:
+    return request_iam(
+        profile,
+        token,
+        "GET",
+        f"compat/users/{urllib.parse.quote(user_id, safe='')}/security-keys",
+    )
+
+
+def read_security_key(
+    profile: Profile, token: str, user_id: str, security_key_id: str
+) -> dict[str, Any]:
+    return request_iam(
+        profile,
+        token,
+        "GET",
+        f"compat/users/{urllib.parse.quote(user_id, safe='')}/security-keys/"
+        f"{urllib.parse.quote(security_key_id, safe='')}",
+    )
+
+
+def delete_security_key(
+    profile: Profile, token: str, user_id: str, security_key_id: str
+) -> None:
+    request_iam(
+        profile,
+        token,
+        "DELETE",
+        f"compat/users/{urllib.parse.quote(user_id, safe='')}/security-keys/"
+        f"{urllib.parse.quote(security_key_id, safe='')}",
+    )
+
+
 def issue_access_token(profile: Profile) -> str:
     form = urllib.parse.urlencode(
         {"grant_type": JWT_GRANT_TYPE, "assertion": create_assertion(profile)}
