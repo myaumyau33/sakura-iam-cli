@@ -1,4 +1,15 @@
 #!/usr/bin/env -S uv --cache-dir /tmp/sakura-iam-cli-uv-cache run --project . python
+import sys
+
 from sakura_iam_cli.cli import main
+
+if "--install-completion" in sys.argv:
+    print(
+        "error: shell completion requires sakura-iam-cli to be installed on PATH.\n"
+        "Run: uv tool install --force .\n"
+        "Then: sakura-iam-cli --install-completion",
+        file=sys.stderr,
+    )
+    raise SystemExit(2)
 
 main()

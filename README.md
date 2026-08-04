@@ -82,8 +82,20 @@ uv tool install --force dist/sakura_iam_cli-0.1.0-py3-none-any.whl
 
 ## シェル補完
 
+シェル補完は`PATH`上の`sakura-iam-cli`を呼び出すため、リポジトリ内の`./sakura-iam-cli`ランチャーだけでは利用できません。最初にCLIをツールとしてインストールします。
+
 ```console
+uv tool install --force .
+rehash
+command -v sakura-iam-cli
 sakura-iam-cli --install-completion
+exec zsh
+```
+
+`command -v`でパスが表示されない場合、uvのツール用binディレクトリを`PATH`へ追加してください。uvから案内を表示・設定するには次を実行します。
+
+```console
+uv tool update-shell
 exec zsh
 ```
 
