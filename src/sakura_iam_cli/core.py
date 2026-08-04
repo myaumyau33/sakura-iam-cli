@@ -110,6 +110,118 @@ def _request_json(request: urllib.request.Request) -> dict[str, Any]:
         raise CliError("IAM API returned invalid JSON") from exc
 
 
+def request_iam(
+    profile: Profile,
+    token: str,
+    method: str,
+    path: str,
+    *,
+    query: dict[str, Any] | None = None,
+    json_body: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    url = urllib.parse.urljoin(profile.base_url, path.lstrip("/"))
+    if query:
+        values = {key: value for key, value in query.items() if value is not None}
+        if values:
+            url = f"{url}?{urllib.parse.urlencode(values)}"
+    data = None if json_body is None else json.dumps(json_body).encode()
+    headers = {"Authorization": f"Bearer {token}"}
+    if json_body is not None:
+        headers["Content-Type"] = "application/json"
+    return _request_json(
+        urllib.request.Request(url, data=data, headers=headers, method=method)
+    )
+
+
+def list_service_principals(
+    profile: Profile,
+    token: str,
+    *,
+    page: int | None = None,
+    per_page: int | None = None,
+    project_id: str | None = None,
+    ordering: str | None = None,
+) -> dict[str, Any]:
+    return request_iam(
+        profile,
+        token,
+        "GET",
+        "service-principals",
+        query={"page": page, "per_page": per_page, "project_id": project_id, "ordering": ordering},
+    )
+
+
+def create_service_principal(
+    profile: Profile, token: str, project_id: str, name: str, description: str
+) -> dict[str, Any]:
+    return request_iam(
+        profile,
+        token,
+        "POST",
+        "service-principals",
+        json_body={"project_id": int(project_id), "name": name, "description": description},
+    )
+
+
+def read_service_principal(
+    profile: Profile, token: str, service_principal_id: str
+) -> dict[str, Any]:
+    return request_iam(
+        profile,
+        token,
+        "GET",
+        f"service-principals/{urllib.parse.quote(service_principal_id, safe='')}",
+    )
+
+
+def update_service_principal(
+    profile: Profile,
+    token: str,
+    service_principal_id: str,
+    name: str,
+    description: str | None,
+) -> dict[str, Any]:
+    body = {"name": name}
+    if description is not None:
+        body["description"] = description
+    return request_iam(
+        profile,
+        token,
+        "PUT",
+        f"service-principals/{urllib.parse.quote(service_principal_id, safe='')}",
+        json_body=body,
+    )
+
+
+def delete_service_principal(
+    profile: Profile, token: str, service_principal_id: str
+) -> None:
+    request_iam(
+        profile,
+        token,
+        "DELETE",
+        f"service-principals/{urllib.parse.quote(service_principal_id, safe='')}",
+    )
+
+
+def list_service_principal_keys(
+    profile: Profile,
+    token: str,
+    service_principal_id: str,
+    *,
+    page: int | None = None,
+    per_page: int | None = None,
+    ordering: str | None = None,
+) -> dict[str, Any]:
+    return request_iam(
+        profile,
+        token,
+        "GET",
+        f"service-principals/{urllib.parse.quote(service_principal_id, safe='')}/keys",
+        query={"page": page, "per_page": per_page, "ordering": ordering},
+    )
+
+
 def issue_access_token(profile: Profile) -> str:
     form = urllib.parse.urlencode(
         {"grant_type": JWT_GRANT_TYPE, "assertion": create_assertion(profile)}

@@ -8,6 +8,7 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 
 from sakura_iam_cli.core import CliError, Profile, create_assertion, generate_key_pairs
+from sakura_iam_cli import core
 
 
 def decode_part(value: str) -> dict:
@@ -49,3 +50,43 @@ def test_assertion_claims(tmp_path: Path):
         "sub": "sp-1",
     }
 
+
+def test_service_principal_api_requests(tmp_path: Path, monkeypatch):
+    profile = Profile("https://example.test/iam/1.0/", "10", "auth-sp", "kid", tmp_path / "key")
+    requests = []
+    monkeypatch.setattr(
+        core,
+        "_request_json",
+        lambda request: requests.append(request) or {"ok": True},
+    )
+
+    core.list_service_principals(
+        profile, "token", page=2, per_page=50, project_id="10", ordering="-name"
+    )
+    core.create_service_principal(profile, "token", "10", "worker", "description")
+    core.read_service_principal(profile, "token", "sp/1")
+    core.update_service_principal(profile, "token", "sp/1", "renamed", "updated")
+    core.delete_service_principal(profile, "token", "sp/1")
+    core.list_service_principal_keys(
+        profile, "token", "sp/1", page=1, per_page=20, ordering="-created_at"
+    )
+
+    assert [request.method for request in requests] == [
+        "GET", "POST", "GET", "PUT", "DELETE", "GET"
+    ]
+    assert requests[0].full_url == (
+        "https://example.test/iam/1.0/service-principals?"
+        "page=2&per_page=50&project_id=10&ordering=-name"
+    )
+    assert json.loads(requests[1].data) == {
+        "project_id": 10,
+        "name": "worker",
+        "description": "description",
+    }
+    assert requests[2].full_url.endswith("/service-principals/sp%2F1")
+    assert json.loads(requests[3].data) == {"name": "renamed", "description": "updated"}
+    assert requests[4].full_url.endswith("/service-principals/sp%2F1")
+    assert requests[5].full_url.endswith(
+        "/service-principals/sp%2F1/keys?page=1&per_page=20&ordering=-created_at"
+    )
+    assert all(request.headers["Authorization"] == "Bearer token" for request in requests)

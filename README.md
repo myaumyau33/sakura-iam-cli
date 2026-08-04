@@ -61,3 +61,25 @@ uv run pytest
 ```
 
 API仕様: [さくらのクラウド IAM API](https://manual.sakura.ad.jp/api/cloud/portal/?api=iam-api) / [サービスプリンシパル](https://manual.sakura.ad.jp/cloud/controlpanel/service-principal.html#id8)
+
+## サービスプリンシパル操作
+
+```console
+# 一覧（project-id、page、per-page、orderingで絞り込み可能）
+./sakura-iam-cli sp list --project-id 123456789012
+
+# 作成（project-id省略時はプロファイルのproject_idを利用）
+./sakura-iam-cli sp create --name batch-worker --description "バッチ処理用"
+
+# 取得・更新・削除
+./sakura-iam-cli sp get 987654321098
+./sakura-iam-cli sp update 987654321098 --name new-name --description "更新後"
+./sakura-iam-cli sp delete 987654321098 --dry-run
+./sakura-iam-cli sp delete 987654321098
+
+# 設定中のSPキーでアクセストークンを発行
+./sakura-iam-cli sp token
+
+# 指定SPのキー一覧
+./sakura-iam-cli sp-key list --service-principal-id 987654321098
+```

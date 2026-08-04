@@ -88,3 +88,12 @@ def test_disable_uses_recorded_target_and_updates_status(tmp_path: Path, monkeyp
     assert result.exit_code == 0
     assert changed == [(profile, "token", "target-sp", "123", "disable")]
     assert json.loads(record_path.read_text())["status"] == "disabled"
+
+
+def test_service_principal_delete_dry_run_does_not_authenticate(monkeypatch):
+    monkeypatch.setattr(
+        cli, "authenticated", lambda *_: (_ for _ in ()).throw(AssertionError("authenticated"))
+    )
+    result = runner.invoke(cli.app, ["sp", "delete", "123", "--dry-run"])
+    assert result.exit_code == 0
+    assert "would_delete" in result.stdout
