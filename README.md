@@ -115,6 +115,7 @@ sakura-iam-cli
 ├── iam-role    IAMロールの参照
 ├── project     プロジェクト
 ├── folder      フォルダ
+├── resource    フォルダとプロジェクトのパス操作
 ├── group       ユーザグループと所属ユーザ
 └── user        ユーザ、メール、OTP、認証デバイス
 ```
@@ -249,6 +250,53 @@ sakura-iam-cli folder move --folder-id 223000000000 --to-root
 
 配下にフォルダまたはプロジェクトが残っているフォルダは削除できません。
 
+## リソースツリーをls/mv形式で操作
+
+`resource`では、フォルダとプロジェクトを同じツリーとして扱えます。パスは`/`から始まる絶対パスです。
+
+```console
+# ルートとフォルダ直下を表示
+sakura-iam-cli resource ls /
+sakura-iam-cli resource ls /Production
+
+# JSON形式で表示
+sakura-iam-cli resource ls /Production --json
+
+# フォルダをパスで作成
+sakura-iam-cli resource mkdir /Production/Batch
+sakura-iam-cli resource mkdir -p /Production/Apps/Batch/Logs
+
+# プロジェクトまたはフォルダを移動（末尾が移動先）
+sakura-iam-cli resource mv /Development/automation-project /Production/
+sakura-iam-cli resource mv /Development/Batch /Production/
+
+# 複数リソースを移動
+sakura-iam-cli resource mv \
+  /Development/project-a \
+  /Development/project-b \
+  /Production/
+
+# ルートへ移動
+sakura-iam-cli resource mv /Production/OldProject /
+```
+
+プロジェクトは名前とプロジェクトコードのどちらでも解決できます。同じ階層に同名候補があり曖昧な場合、CLIは処理を中止するためID形式で指定してください。
+
+```console
+sakura-iam-cli resource mv project:123456789012 folder:223000000000
+sakura-iam-cli resource mv folder:224000000000 /
+```
+
+事前確認には`--dry-run`を使います。パス解決のため一覧APIと認証は実行しますが、移動APIは呼び出しません。
+
+```console
+sakura-iam-cli resource mv /Development/Batch /Production/ --dry-run
+```
+
+フォルダを自身や子孫へ移動する操作は事前に拒否されます。フォルダとプロジェクトを同時に指定した移動はAPI上では別々のリクエストになるため、完全な原子操作ではありません。既存の`folder move`と`project move`はIDを直接扱う低レベルコマンドとして引き続き利用できます。
+
+`resource mkdir`は通常、親フォルダが存在する場合だけ末尾のフォルダを作成します。`--parents`または`-p`を指定すると不足している親フォルダも作成し、対象パスがすでに存在する場合は成功扱いで何もしません。`--description`は最後に作るフォルダにだけ設定されます。`--dry-run`ではパス解決用の一覧APIだけを呼び出します。
+
 ## グループ
 
 ```console
@@ -302,7 +350,7 @@ sakura-iam-cli user delete-security-key 111111111111 SECURITY_KEY_ID --dry-run
 
 ## dry-run
 
-削除、無効化、移動、所属ユーザの置換などの対応コマンドでは`--dry-run`を利用できます。dry-runでは認証やIAM API呼び出し、ローカルJSONの更新を行いません。
+削除、無効化、移動、所属ユーザの置換などの対応コマンドでは`--dry-run`を利用できます。通常のdry-runでは認証やIAM API呼び出し、ローカルJSONの更新を行いません。`resource mv --dry-run`のみ、パス解決に必要な一覧取得と認証を行いますが、変更APIは呼び出しません。
 
 ```console
 sakura-iam-cli folder delete 223000000000 --dry-run

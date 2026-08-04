@@ -261,3 +261,62 @@ def test_user_destructive_dry_run_does_not_authenticate(monkeypatch):
         result = runner.invoke(cli.app, arguments)
         assert result.exit_code == 0
         assert "would_" in result.stdout
+
+
+def test_resource_mv_dry_run_resolves_paths_without_mutation(monkeypatch):
+    tree = cli.ResourceTree(
+        [{"id": 1, "name": "Production", "parent_id": None}],
+        [{"id": 10, "name": "App", "code": "app", "parent_folder_id": None}],
+    )
+    profile = Profile("https://example.test/", "10", "sp", "kid", Path("key"))
+    monkeypatch.setattr(cli, "authenticated", lambda *_: (profile, "token"))
+    monkeypatch.setattr(cli, "load_resource_tree", lambda *_: tree)
+    monkeypatch.setattr(
+        cli, "move_projects", lambda *_: (_ for _ in ()).throw(AssertionError("moved"))
+    )
+    result = runner.invoke(
+        cli.app, ["resource", "mv", "/app", "/Production", "--dry-run"]
+    )
+    assert result.exit_code == 0
+    assert "would_move" in result.stdout
+    assert '"id": "10"' in result.stdout
+
+
+def test_resource_mkdir_parents_creates_each_missing_folder(monkeypatch):
+    tree = cli.ResourceTree(
+        [{"id": 1, "name": "Production", "parent_id": None}], []
+    )
+    profile = Profile("https://example.test/", "10", "sp", "kid", Path("key"))
+    created = []
+    monkeypatch.setattr(cli, "authenticated", lambda *_: (profile, "token"))
+    monkeypatch.setattr(cli, "load_resource_tree", lambda *_: tree)
+
+    def fake_create(_profile, _token, name, description, parent_id):
+        created.append((name, description, parent_id))
+        return {"id": len(created) + 1, "name": name, "parent_id": parent_id}
+
+    monkeypatch.setattr(cli, "create_folder", fake_create)
+    result = runner.invoke(
+        cli.app,
+        [
+            "resource", "mkdir", "/Production/App/Logs", "--parents",
+            "--description", "log folder",
+        ],
+    )
+    assert result.exit_code == 0
+    assert created == [("App", "", "1"), ("Logs", "log folder", "2")]
+
+
+def test_resource_mkdir_dry_run_does_not_create(monkeypatch):
+    tree = cli.ResourceTree([], [])
+    profile = Profile("https://example.test/", "10", "sp", "kid", Path("key"))
+    monkeypatch.setattr(cli, "authenticated", lambda *_: (profile, "token"))
+    monkeypatch.setattr(cli, "load_resource_tree", lambda *_: tree)
+    monkeypatch.setattr(
+        cli, "create_folder", lambda *_: (_ for _ in ()).throw(AssertionError("created"))
+    )
+    result = runner.invoke(
+        cli.app, ["resource", "mkdir", "/One/Two", "-p", "--dry-run"]
+    )
+    assert result.exit_code == 0
+    assert "would_create" in result.stdout
