@@ -1,13 +1,21 @@
 import base64
 import json
 import stat
+import urllib.error
+import urllib.request
 from pathlib import Path
 
 import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 
-from sakura_iam_cli.core import CliError, Profile, create_assertion, generate_key_pairs
+from sakura_iam_cli.core import (
+    CliError,
+    Profile,
+    create_assertion,
+    generate_key_pairs,
+    load_profile,
+)
 from sakura_iam_cli import core
 
 
@@ -49,6 +57,64 @@ def test_assertion_claims(tmp_path: Path):
         "iss": "sp-1",
         "sub": "sp-1",
     }
+
+
+def write_profile(tmp_path: Path, base_url: str = "https://example.test/") -> Path:
+    private_key = tmp_path / "key.private.pem"
+    private_key.write_text("placeholder", encoding="ascii")
+    private_key.chmod(0o600)
+    settings = tmp_path / "settings.json"
+    settings.write_text(json.dumps({
+        "profiles": {
+            "default": {
+                "base_url": base_url,
+                "project_id": "1",
+                "service_principal_id": "2",
+                "kid": "kid",
+                "private_key": private_key.name,
+            }
+        }
+    }), encoding="utf-8")
+    settings.chmod(0o600)
+    return settings
+
+
+def test_load_profile_requires_secure_files_and_https(tmp_path: Path):
+    settings = write_profile(tmp_path)
+    assert load_profile(settings).base_url == "https://example.test/"
+
+    settings.chmod(0o644)
+    with pytest.raises(CliError, match="settings file permissions"):
+        load_profile(settings)
+    settings.chmod(0o600)
+
+    (tmp_path / "key.private.pem").chmod(0o644)
+    with pytest.raises(CliError, match="private key permissions"):
+        load_profile(settings)
+
+
+def test_load_profile_allows_only_loopback_http(tmp_path: Path):
+    settings = write_profile(tmp_path, "http://127.0.0.1:8000/api")
+    assert load_profile(settings).base_url == "http://127.0.0.1:8000/api/"
+
+    settings = write_profile(tmp_path, "http://example.test/api")
+    with pytest.raises(CliError, match="must use HTTPS"):
+        load_profile(settings)
+
+
+def test_request_rejects_non_http_urls_and_redirects(monkeypatch):
+    with pytest.raises(CliError, match="API URL"):
+        core._request_json(urllib.request.Request("file:///tmp/settings.json"))
+
+    error = urllib.error.HTTPError(
+        "https://example.test/", 302, "Found", {"Location": "https://evil.test/"}, None
+    )
+    def raise_redirect(*args, **kwargs):
+        raise error
+
+    monkeypatch.setattr(core._NO_REDIRECT_OPENER, "open", raise_redirect)
+    with pytest.raises(CliError, match="redirect refused"):
+        core._request_json(urllib.request.Request("https://example.test/"))
 
 
 def test_service_principal_api_requests(tmp_path: Path, monkeypatch):

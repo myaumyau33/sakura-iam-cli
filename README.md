@@ -13,7 +13,7 @@ API仕様は[さくらのクラウド IAM API](https://manual.sakura.ad.jp/api/c
 
 ```console
 uv sync
-cp settings.example.json settings.json
+install -m 600 settings.example.json settings.json
 ```
 
 `settings.json`に、CLIの認証に使う既存サービスプリンシパルキーを設定します。
@@ -33,7 +33,7 @@ cp settings.example.json settings.json
 }
 ```
 
-`settings.json`と秘密鍵はGitへコミットしないでください。相対パスの`private_key`は`settings.json`のあるディレクトリを基準に解決されます。
+`settings.json`と秘密鍵はGitへコミットせず、所有者だけが読める権限（`0600`または`0400`）にしてください。CLIは権限が広すぎるファイルを拒否します。相対パスの`private_key`は`settings.json`のあるディレクトリを基準に解決されます。API URLはHTTPSに限定され、ローカル開発用のloopbackアドレスに限りHTTPも利用できます。
 
 リポジトリ内では次のどちらでも実行できます。
 
@@ -60,14 +60,14 @@ uv build
 
 ```text
 dist/
-├── sakura_iam_cli-0.9.0-py3-none-any.whl
-└── sakura_iam_cli-0.9.0.tar.gz
+├── sakura_iam_cli-0.10.0-py3-none-any.whl
+└── sakura_iam_cli-0.10.0.tar.gz
 ```
 
 wheelをCLIツールとしてインストールする場合:
 
 ```console
-uv tool install dist/sakura_iam_cli-0.9.0-py3-none-any.whl
+uv tool install dist/sakura_iam_cli-0.10.0-py3-none-any.whl
 sakura-iam-cli --help
 ```
 
@@ -75,7 +75,7 @@ sakura-iam-cli --help
 
 ```console
 uv build
-uv tool install --force --reinstall dist/sakura_iam_cli-0.9.0-py3-none-any.whl
+uv tool install --force --reinstall dist/sakura_iam_cli-0.10.0-py3-none-any.whl
 ```
 
 開発中はビルドせず、`./sakura-iam-cli`または`uv run sakura-iam-cli`を利用できます。現在のビルド成果物はPython wheelであり、依存関係を内包した単一バイナリではありません。

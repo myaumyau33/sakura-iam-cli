@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import base64
+import ipaddress
 import json
 import os
+import stat
 import time
 import urllib.error
 import urllib.parse
@@ -23,6 +25,49 @@ class CliError(Exception):
     """An error that should be shown without a traceback."""
 
 
+def _is_loopback_host(hostname: str) -> bool:
+    if hostname == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(hostname).is_loopback
+    except ValueError:
+        return False
+
+
+def _validate_api_url(url: str) -> str:
+    parsed = urllib.parse.urlsplit(url)
+    if not parsed.hostname:
+        raise CliError("API URL must include a host")
+    if parsed.username is not None or parsed.password is not None:
+        raise CliError("API URL must not include credentials")
+    if parsed.scheme == "https":
+        return url
+    if parsed.scheme == "http" and _is_loopback_host(parsed.hostname):
+        return url
+    raise CliError("API URL must use HTTPS (HTTP is allowed only for loopback hosts)")
+
+
+def _validate_private_file(path: Path, label: str) -> None:
+    try:
+        file_stat = path.stat()
+    except FileNotFoundError:
+        return
+    if not stat.S_ISREG(file_stat.st_mode):
+        raise CliError(f"{label} is not a regular file: {path}")
+    if os.name != "nt" and stat.S_IMODE(file_stat.st_mode) & 0o077:
+        raise CliError(
+            f"{label} permissions are too open: {path}; run chmod 600 {path}"
+        )
+
+
+class _NoRedirectHandler(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):  # noqa: ANN001
+        return None
+
+
+_NO_REDIRECT_OPENER = urllib.request.build_opener(_NoRedirectHandler())
+
+
 @dataclass(frozen=True)
 class Profile:
     base_url: str
@@ -37,6 +82,7 @@ class Profile:
 
 
 def load_profile(settings_path: Path, profile_name: str | None = None) -> Profile:
+    _validate_private_file(settings_path, "settings file")
     try:
         data = json.loads(settings_path.read_text(encoding="utf-8"))
     except FileNotFoundError as exc:
@@ -56,8 +102,11 @@ def load_profile(settings_path: Path, profile_name: str | None = None) -> Profil
     private_key = Path(values["private_key"]).expanduser()
     if not private_key.is_absolute():
         private_key = settings_path.parent / private_key
+    _validate_private_file(private_key, "private key")
     return Profile(
-        base_url=str(raw.get("base_url", DEFAULT_BASE_URL)).rstrip("/") + "/",
+        base_url=_validate_api_url(
+            str(raw.get("base_url", DEFAULT_BASE_URL)).rstrip("/") + "/"
+        ),
         project_id=values["project_id"],
         service_principal_id=values["service_principal_id"],
         kid=values["kid"],
@@ -70,6 +119,8 @@ def _b64url(value: bytes) -> str:
 
 
 def create_assertion(profile: Profile, now: int | None = None) -> str:
+    _validate_api_url(profile.token_url)
+    _validate_private_file(profile.private_key, "private key")
     timestamp = int(time.time()) if now is None else now
     header = {"alg": "RS256", "kid": profile.kid, "typ": "JWT"}
     payload = {
@@ -94,11 +145,14 @@ def create_assertion(profile: Profile, now: int | None = None) -> str:
 
 
 def _request_json(request: urllib.request.Request) -> dict[str, Any]:
+    _validate_api_url(request.full_url)
     try:
-        with urllib.request.urlopen(request, timeout=30) as response:
+        with _NO_REDIRECT_OPENER.open(request, timeout=30) as response:
             body = response.read()
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace")
+        if 300 <= exc.code < 400:
+            raise CliError(f"IAM API redirect refused (HTTP {exc.code})") from exc
         raise CliError(f"IAM API returned HTTP {exc.code}: {detail}") from exc
     except urllib.error.URLError as exc:
         raise CliError(f"could not connect to IAM API: {exc.reason}") from exc
