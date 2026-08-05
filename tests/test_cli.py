@@ -142,6 +142,634 @@ def test_api_key_delete_dry_run_does_not_authenticate(monkeypatch):
     assert "would_delete" in result.stdout
 
 
+def test_id_role_commands(monkeypatch):
+    profile = Profile("https://example.test/", "10", "sp", "kid", Path("key"))
+    calls = []
+    monkeypatch.setattr(cli, "authenticated", lambda *_: (profile, "token"))
+    monkeypatch.setattr(
+        cli,
+        "list_id_roles",
+        lambda *args, **kwargs: calls.append((args, kwargs)) or {"items": []},
+    )
+    monkeypatch.setattr(
+        cli,
+        "read_id_role",
+        lambda *args: calls.append((args, {})) or {"id": args[-1]},
+    )
+
+    listed = runner.invoke(cli.app, ["id-role", "list", "--page", "2", "--per-page", "25"])
+    fetched = runner.invoke(cli.app, ["id-role", "get", "identity-admin"])
+
+    assert listed.exit_code == 0
+    assert fetched.exit_code == 0
+    assert calls[0] == ((profile, "token"), {"page": 2, "per_page": 25})
+    assert calls[1] == ((profile, "token", "identity-admin"), {})
+
+
+def test_id_policy_update_validates_and_updates(tmp_path: Path, monkeypatch):
+    policy_file = tmp_path / "policy.json"
+    policy_file.write_text(json.dumps({"bindings": [{
+        "role": {"type": "preset", "id": "identity-admin"},
+        "principals": [{"type": "user", "id": 100}],
+    }]}))
+    profile = Profile("https://example.test/", "10", "sp", "kid", Path("key"))
+    received = []
+    monkeypatch.setattr(cli, "authenticated", lambda *_: (profile, "token"))
+    monkeypatch.setattr(
+        cli,
+        "update_organization_id_policy",
+        lambda *args: received.append(args) or {"bindings": args[-1]},
+    )
+
+    result = runner.invoke(cli.app, ["id-policy", "update", str(policy_file)])
+
+    assert result.exit_code == 0
+    assert received == [(profile, "token", [{
+        "role": {"type": "preset", "id": "identity-admin"},
+        "principals": [{"type": "user", "id": 100}],
+    }])]
+
+
+def test_id_policy_update_dry_run_does_not_authenticate(tmp_path: Path, monkeypatch):
+    policy_file = tmp_path / "policy.json"
+    policy_file.write_text('{"bindings": []}')
+    monkeypatch.setattr(
+        cli, "authenticated", lambda *_: (_ for _ in ()).throw(AssertionError("authenticated"))
+    )
+
+    result = runner.invoke(
+        cli.app, ["id-policy", "update", str(policy_file), "--dry-run"]
+    )
+
+    assert result.exit_code == 0
+    assert "would_update" in result.stdout
+
+
+def test_id_policy_rejects_invalid_document(tmp_path: Path):
+    policy_file = tmp_path / "policy.json"
+    policy_file.write_text('{"bindings": [{"role": {"type": "custom", "id": "admin"}}]}')
+
+    result = runner.invoke(cli.app, ["id-policy", "update", str(policy_file), "--dry-run"])
+
+    assert result.exit_code == 1
+    assert "role" in result.stderr
+
+
+def test_organization_update_dry_run_does_not_authenticate(monkeypatch):
+    monkeypatch.setattr(
+        cli, "authenticated", lambda *_: (_ for _ in ()).throw(AssertionError("authenticated"))
+    )
+
+    result = runner.invoke(
+        cli.app, ["organization", "update", "--name", "New Organization", "--dry-run"]
+    )
+
+    assert result.exit_code == 0
+    assert "would_update" in result.stdout
+
+
+def test_service_policy_state_dry_runs_do_not_authenticate(monkeypatch):
+    monkeypatch.setattr(
+        cli, "authenticated", lambda *_: (_ for _ in ()).throw(AssertionError("authenticated"))
+    )
+    for action in ("enable", "disable"):
+        result = runner.invoke(cli.app, ["service-policy", action, "--dry-run"])
+        assert result.exit_code == 0
+        assert f"would_{action}" in result.stdout
+
+
+def test_service_policy_update_normalizes_list_response(tmp_path: Path, monkeypatch):
+    policy_file = tmp_path / "service-policy.json"
+    policy_file.write_text(json.dumps({"rules": [{
+        "code": "cloud-restrict-zone",
+        "name": "ゾーン制限",
+        "spec": {"contents": [{
+            "allow_all": False,
+            "deny_all": False,
+            "values": {"allowed_values": ["is:iaas"]},
+        }]},
+        "is_active": True,
+        "is_dry_run": False,
+    }]}))
+    profile = Profile("https://example.test/", "10", "sp", "kid", Path("key"))
+    received = []
+    monkeypatch.setattr(cli, "authenticated", lambda *_: (profile, "token"))
+    monkeypatch.setattr(
+        cli,
+        "update_organization_service_policy_rules",
+        lambda *args: received.append(args) or {"rules": args[-1]},
+    )
+
+    result = runner.invoke(cli.app, ["service-policy", "update", str(policy_file)])
+
+    assert result.exit_code == 0
+    assert received[0][2][0]["code"] == "cloud-restrict-zone"
+    assert "name" not in received[0][2][0]
+
+
+def test_service_policy_update_rejects_invalid_rules(tmp_path: Path):
+    policy_file = tmp_path / "service-policy.json"
+    policy_file.write_text('{"rules": [{"code": "rule", "is_active": true}]}')
+
+    result = runner.invoke(
+        cli.app, ["service-policy", "update", str(policy_file), "--dry-run"]
+    )
+
+    assert result.exit_code == 1
+    assert "is_dry_run" in result.stderr
+
+
+def test_password_policy_update_validates_and_dry_runs(tmp_path: Path, monkeypatch):
+    policy_file = tmp_path / "password-policy.json"
+    policy_file.write_text(json.dumps({
+        "min_length": 12,
+        "require_uppercase": True,
+        "require_lowercase": True,
+        "require_symbols": False,
+    }))
+    monkeypatch.setattr(
+        cli, "authenticated", lambda *_: (_ for _ in ()).throw(AssertionError("authenticated"))
+    )
+
+    result = runner.invoke(
+        cli.app, ["auth", "update-password-policy", str(policy_file), "--dry-run"]
+    )
+
+    assert result.exit_code == 0
+    assert "would_update" in result.stdout
+
+
+def test_password_policy_rejects_out_of_range_length(tmp_path: Path):
+    policy_file = tmp_path / "password-policy.json"
+    policy_file.write_text(json.dumps({
+        "min_length": 7,
+        "require_uppercase": False,
+        "require_lowercase": False,
+        "require_symbols": False,
+    }))
+
+    result = runner.invoke(
+        cli.app, ["auth", "update-password-policy", str(policy_file), "--dry-run"]
+    )
+
+    assert result.exit_code == 1
+    assert "8 through 64" in result.stderr
+
+
+def test_auth_conditions_update_validates_and_updates(tmp_path: Path, monkeypatch):
+    conditions_file = tmp_path / "conditions.json"
+    conditions = {
+        "ip_restriction": {
+            "mode": "allow_list",
+            "source_network": ["192.0.2.0/24"],
+        },
+        "require_two_factor_auth": {"enabled": True},
+        "datetime_restriction": {
+            "after": "2026-08-01T00:00:00+09:00",
+            "before": None,
+        },
+    }
+    conditions_file.write_text(json.dumps(conditions))
+    profile = Profile("https://example.test/", "10", "sp", "kid", Path("key"))
+    received = []
+    monkeypatch.setattr(cli, "authenticated", lambda *_: (profile, "token"))
+    monkeypatch.setattr(
+        cli,
+        "update_auth_conditions",
+        lambda *args: received.append(args) or args[-1],
+    )
+
+    result = runner.invoke(cli.app, ["auth", "update-conditions", str(conditions_file)])
+
+    assert result.exit_code == 0
+    assert received == [(profile, "token", conditions)]
+
+
+def test_auth_conditions_reject_invalid_network(tmp_path: Path):
+    conditions_file = tmp_path / "conditions.json"
+    conditions_file.write_text(json.dumps({
+        "ip_restriction": {"mode": "allow_list", "source_network": ["not-a-cidr"]},
+        "require_two_factor_auth": {"enabled": False},
+        "datetime_restriction": {"after": None, "before": None},
+    }))
+
+    result = runner.invoke(
+        cli.app, ["auth", "update-conditions", str(conditions_file), "--dry-run"]
+    )
+
+    assert result.exit_code == 1
+    assert "IPv4 CIDR" in result.stderr
+
+
+def test_iam_policy_requires_exactly_one_target():
+    missing = runner.invoke(cli.app, ["iam-policy", "get"])
+    duplicate = runner.invoke(
+        cli.app,
+        ["iam-policy", "get", "--organization", "--project-id", "10"],
+    )
+
+    assert missing.exit_code == 1
+    assert duplicate.exit_code == 1
+    assert "exactly one" in missing.stderr
+    assert "exactly one" in duplicate.stderr
+
+
+def test_iam_policy_update_dry_run_does_not_authenticate(tmp_path: Path, monkeypatch):
+    policy_file = tmp_path / "iam-policy.json"
+    policy_file.write_text(json.dumps({"bindings": [{
+        "role": {"type": "preset", "id": "owner"},
+        "principals": [{"type": "group", "id": 100}],
+    }]}))
+    monkeypatch.setattr(
+        cli, "authenticated", lambda *_: (_ for _ in ()).throw(AssertionError("authenticated"))
+    )
+
+    result = runner.invoke(
+        cli.app,
+        [
+            "iam-policy", "update", str(policy_file),
+            "--folder-id", "20", "--dry-run",
+        ],
+    )
+
+    assert result.exit_code == 0
+    output = json.loads(result.stdout)
+    assert output["status"] == "would_update"
+    assert output["target"] == {"type": "folder", "id": "20"}
+
+
+def test_iam_policy_get_dispatches_project(monkeypatch):
+    profile = Profile("https://example.test/", "10", "sp", "kid", Path("key"))
+    received = []
+    monkeypatch.setattr(cli, "authenticated", lambda *_: (profile, "token"))
+    monkeypatch.setattr(
+        cli,
+        "read_project_iam_policy",
+        lambda *args: received.append(args) or {"bindings": []},
+    )
+
+    result = runner.invoke(cli.app, ["iam-policy", "get", "--project-id", "30"])
+
+    assert result.exit_code == 0
+    assert received == [(profile, "token", "30")]
+
+
+def test_merge_iam_policy_bindings_preserves_existing_and_deduplicates():
+    bindings = [{
+        "role": {"type": "preset", "id": "owner"},
+        "principals": [{"type": "user", "id": 10}],
+    }]
+    principals = [
+        {"type": "user", "id": 10},
+        {"type": "service-principal", "id": 20},
+    ]
+
+    merged = cli.merge_iam_policy_bindings(bindings, ["owner", "viewer"], principals)
+
+    assert bindings[0]["principals"] == [{"type": "user", "id": 10}]
+    assert merged == [
+        {
+            "role": {"type": "preset", "id": "owner"},
+            "principals": [
+                {"type": "user", "id": 10},
+                {"type": "service-principal", "id": 20},
+            ],
+        },
+        {
+            "role": {"type": "preset", "id": "viewer"},
+            "principals": principals,
+        },
+    ]
+
+
+def test_iam_role_choices_preselect_common_roles_and_mark_partial_roles():
+    principals = [
+        {"type": "user", "id": 10},
+        {"type": "service-principal", "id": 20},
+    ]
+    bindings = [
+        {
+            "role": {"type": "preset", "id": "viewer"},
+            "principals": principals,
+        },
+        {
+            "role": {"type": "preset", "id": "editor"},
+            "principals": [{"type": "user", "id": 10}],
+        },
+    ]
+    roles = [
+        {
+            "id": "viewer", "name": "Viewer", "category": "cloud",
+            "lowest_grantable_resource": "project",
+        },
+        {
+            "id": "editor", "name": "Editor", "category": "cloud",
+            "lowest_grantable_resource": "project",
+        },
+        {
+            "id": "folder-admin", "name": "Folder Admin", "category": "iam",
+            "lowest_grantable_resource": "folder",
+        },
+    ]
+
+    choices = cli.build_iam_role_choices(roles, "project", bindings, principals)
+
+    assert [choice.value for choice in choices] == ["viewer", "editor"]
+    assert choices[0].checked is True
+    assert choices[1].checked is False
+    assert "一部割当済み" in choices[1].title
+
+
+def test_iam_role_choices_preselect_all_existing_roles_for_one_principal():
+    principal = {"type": "user", "id": 10}
+    bindings = [
+        {
+            "role": {"type": "preset", "id": role_id},
+            "principals": [principal],
+        }
+        for role_id in ("viewer", "editor")
+    ]
+    roles = [
+        {
+            "id": role_id, "name": role_id, "category": "cloud",
+            "lowest_grantable_resource": "project",
+        }
+        for role_id in ("viewer", "editor")
+    ]
+
+    choices = cli.build_iam_role_choices(roles, "project", bindings, [principal])
+
+    assert all(choice.checked for choice in choices)
+
+
+def test_remove_iam_policy_bindings_removes_only_selected_assignments():
+    bindings = [
+        {
+            "role": {"type": "preset", "id": "viewer"},
+            "principals": [
+                {"type": "user", "id": 10},
+                {"type": "service-principal", "id": 20},
+            ],
+        },
+        {
+            "role": {"type": "preset", "id": "editor"},
+            "principals": [{"type": "user", "id": 10}],
+        },
+    ]
+
+    updated = cli.remove_iam_policy_bindings(
+        bindings, ["viewer"], [{"type": "user", "id": 10}]
+    )
+
+    assert updated == [
+        {
+            "role": {"type": "preset", "id": "viewer"},
+            "principals": [{"type": "service-principal", "id": 20}],
+        },
+        bindings[1],
+    ]
+
+
+def test_remove_iam_policy_bindings_drops_empty_binding():
+    bindings = [{
+        "role": {"type": "preset", "id": "viewer"},
+        "principals": [{"type": "user", "id": 10}],
+    }]
+
+    updated = cli.remove_iam_policy_bindings(
+        bindings, ["viewer"], [{"type": "user", "id": 10}]
+    )
+
+    assert updated == []
+
+
+def test_iam_policy_add_interactively_selects_principals_and_roles(monkeypatch):
+    profile = Profile("https://example.test/", "10", "sp", "kid", Path("key"))
+    selections = iter([
+        ["service-principal", "user"],
+        [20],
+        [10],
+        ["owner", "viewer"],
+    ])
+    updated = []
+    monkeypatch.setattr(cli, "authenticated", lambda *_: (profile, "token"))
+    monkeypatch.setattr(
+        cli,
+        "read_organization_iam_policy",
+        lambda *_: {"bindings": [{
+            "role": {"type": "preset", "id": "owner"},
+            "principals": [{"type": "user", "id": 10}],
+        }]},
+    )
+    monkeypatch.setattr(
+        cli,
+        "list_service_principals",
+        lambda *args, **kwargs: {
+            "count": 1, "items": [{"id": 20, "name": "Worker"}]
+        },
+    )
+    monkeypatch.setattr(
+        cli,
+        "list_users",
+        lambda *args, **kwargs: {
+            "count": 1, "items": [{"id": 10, "name": "User", "code": "user"}]
+        },
+    )
+    monkeypatch.setattr(
+        cli,
+        "list_iam_roles",
+        lambda *args, **kwargs: {
+            "count": 2,
+            "items": [
+                {
+                    "id": "owner", "name": "Owner", "category": "iam",
+                    "lowest_grantable_resource": "project",
+                },
+                {
+                    "id": "viewer", "name": "Viewer", "category": "cloud",
+                    "lowest_grantable_resource": "project",
+                },
+            ],
+        },
+    )
+    monkeypatch.setattr(cli, "interactive_checkbox", lambda *_: next(selections))
+    monkeypatch.setattr(cli, "interactive_confirm", lambda *_: True)
+    monkeypatch.setattr(
+        cli,
+        "update_organization_iam_policy",
+        lambda *args: updated.append(args) or {"bindings": args[-1]},
+    )
+
+    result = runner.invoke(cli.app, ["iam-policy", "add", "--organization"])
+
+    assert result.exit_code == 0
+    assert json.loads(result.stdout)["status"] == "updated"
+    assert len(updated) == 1
+    owner, viewer = updated[0][-1]
+    assert owner["principals"] == [
+        {"type": "user", "id": 10},
+        {"type": "service-principal", "id": 20},
+    ]
+    assert viewer["principals"] == [
+        {"type": "service-principal", "id": 20},
+        {"type": "user", "id": 10},
+    ]
+
+
+def test_iam_policy_add_dry_run_does_not_update(monkeypatch):
+    profile = Profile("https://example.test/", "10", "sp", "kid", Path("key"))
+    selections = iter([["user"], [10], ["viewer"]])
+    monkeypatch.setattr(cli, "authenticated", lambda *_: (profile, "token"))
+    monkeypatch.setattr(
+        cli, "read_project_iam_policy", lambda *_: {"bindings": []}
+    )
+    monkeypatch.setattr(
+        cli,
+        "list_users",
+        lambda *args, **kwargs: {"count": 1, "items": [{"id": 10, "name": "User"}]},
+    )
+    monkeypatch.setattr(
+        cli,
+        "list_iam_roles",
+        lambda *args, **kwargs: {"count": 1, "items": [{
+            "id": "viewer", "name": "Viewer", "category": "cloud",
+            "lowest_grantable_resource": "project",
+        }]},
+    )
+    monkeypatch.setattr(cli, "interactive_checkbox", lambda *_: next(selections))
+    monkeypatch.setattr(
+        cli,
+        "interactive_confirm",
+        lambda *_: (_ for _ in ()).throw(AssertionError("confirmed")),
+    )
+    monkeypatch.setattr(
+        cli,
+        "update_project_iam_policy",
+        lambda *_: (_ for _ in ()).throw(AssertionError("updated")),
+    )
+
+    result = runner.invoke(
+        cli.app, ["iam-policy", "add", "--project-id", "30", "--dry-run"]
+    )
+
+    assert result.exit_code == 0
+    assert json.loads(result.stdout)["status"] == "would_update"
+
+
+def test_interactive_iam_policy_target_selects_organization(monkeypatch):
+    profile = Profile("https://example.test/", "10", "sp", "kid", Path("key"))
+    monkeypatch.setattr(cli, "interactive_select", lambda *_: "organization")
+    monkeypatch.setattr(
+        cli, "read_organization", lambda *_: {"id": 1, "name": "Organization"}
+    )
+
+    assert cli.select_iam_policy_target(profile, "token") == ("organization", None)
+
+
+def test_interactive_iam_policy_target_selects_folder(monkeypatch):
+    profile = Profile("https://example.test/", "10", "sp", "kid", Path("key"))
+    selections = iter(["folder", "20"])
+    monkeypatch.setattr(cli, "interactive_select", lambda *_: next(selections))
+    monkeypatch.setattr(
+        cli,
+        "list_folders",
+        lambda *args, **kwargs: {
+            "count": 1, "items": [{"id": 20, "name": "Production"}]
+        },
+    )
+
+    assert cli.select_iam_policy_target(profile, "token") == ("folder", "20")
+
+
+def test_interactive_iam_policy_target_selects_project(monkeypatch):
+    profile = Profile("https://example.test/", "10", "sp", "kid", Path("key"))
+    selections = iter(["project", "30"])
+    monkeypatch.setattr(cli, "interactive_select", lambda *_: next(selections))
+    monkeypatch.setattr(
+        cli,
+        "list_projects",
+        lambda *args, **kwargs: {
+            "count": 1,
+            "items": [{"id": 30, "name": "Application", "code": "app"}],
+        },
+    )
+
+    assert cli.select_iam_policy_target(profile, "token") == ("project", "30")
+
+
+def test_iam_policy_delete_dry_run_removes_selected_assignment(monkeypatch):
+    profile = Profile("https://example.test/", "10", "sp", "kid", Path("key"))
+    selections = iter([["user"], [10], ["viewer"]])
+    bindings = [
+        {
+            "role": {"type": "preset", "id": "viewer"},
+            "principals": [
+                {"type": "user", "id": 10},
+                {"type": "service-principal", "id": 20},
+            ],
+        },
+        {
+            "role": {"type": "preset", "id": "editor"},
+            "principals": [{"type": "user", "id": 10}],
+        },
+    ]
+    monkeypatch.setattr(cli, "authenticated", lambda *_: (profile, "token"))
+    monkeypatch.setattr(
+        cli, "read_project_iam_policy", lambda *_: {"bindings": bindings}
+    )
+    monkeypatch.setattr(
+        cli,
+        "list_users",
+        lambda *args, **kwargs: {
+            "count": 2,
+            "items": [
+                {"id": 10, "name": "Assigned", "code": "assigned"},
+                {"id": 99, "name": "Unassigned", "code": "unassigned"},
+            ],
+        },
+    )
+    monkeypatch.setattr(
+        cli,
+        "list_iam_roles",
+        lambda *args, **kwargs: {
+            "count": 2,
+            "items": [
+                {"id": "viewer", "name": "Viewer", "category": "cloud"},
+                {"id": "editor", "name": "Editor", "category": "cloud"},
+            ],
+        },
+    )
+    seen_choices = []
+
+    def select(_message, choices):
+        seen_choices.append(choices)
+        return next(selections)
+
+    monkeypatch.setattr(cli, "interactive_checkbox", select)
+    monkeypatch.setattr(
+        cli,
+        "interactive_confirm",
+        lambda *_: (_ for _ in ()).throw(AssertionError("confirmed")),
+    )
+    monkeypatch.setattr(
+        cli,
+        "update_project_iam_policy",
+        lambda *_: (_ for _ in ()).throw(AssertionError("updated")),
+    )
+
+    result = runner.invoke(
+        cli.app, ["iam-policy", "delete", "--project-id", "30", "--dry-run"]
+    )
+
+    assert result.exit_code == 0
+    assert [choice.value for choice in seen_choices[1]] == [10]
+    output = json.loads(result.stdout)
+    assert output["bindings"][0]["principals"] == [
+        {"type": "service-principal", "id": 20}
+    ]
+    assert output["bindings"][1] == bindings[1]
+
+
 def test_project_delete_dry_run_does_not_authenticate(monkeypatch):
     monkeypatch.setattr(
         cli, "authenticated", lambda *_: (_ for _ in ()).throw(AssertionError("authenticated"))

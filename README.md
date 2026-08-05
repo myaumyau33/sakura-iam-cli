@@ -1,6 +1,6 @@
 # sakura-iam-cli
 
-さくらのクラウド IAM API をサービスプリンシパル認証で操作する、Python製のCLIです。サービスプリンシパルキーの一括生成・登録に加え、サービスプリンシパル、プロジェクトAPIキー、IAMロール、プロジェクト、フォルダ、グループ、ユーザを操作できます。
+さくらのクラウド IAM API をサービスプリンシパル認証で操作する、Python製のCLIです。サービスプリンシパルキーの一括生成・登録に加え、サービスプリンシパル、プロジェクトAPIキー、IAMポリシー、IAMロール、IDポリシー、IDロール、組織、サービスポリシー、認証設定、プロジェクト、フォルダ、グループ、ユーザを操作できます。
 
 - Python 3.12以上
 - パッケージ管理・ビルド: [uv](https://docs.astral.sh/uv/)
@@ -60,14 +60,14 @@ uv build
 
 ```text
 dist/
-├── sakura_iam_cli-0.1.0-py3-none-any.whl
-└── sakura_iam_cli-0.1.0.tar.gz
+├── sakura_iam_cli-0.9.0-py3-none-any.whl
+└── sakura_iam_cli-0.9.0.tar.gz
 ```
 
 wheelをCLIツールとしてインストールする場合:
 
 ```console
-uv tool install dist/sakura_iam_cli-0.1.0-py3-none-any.whl
+uv tool install dist/sakura_iam_cli-0.9.0-py3-none-any.whl
 sakura-iam-cli --help
 ```
 
@@ -75,7 +75,7 @@ sakura-iam-cli --help
 
 ```console
 uv build
-uv tool install --force dist/sakura_iam_cli-0.1.0-py3-none-any.whl
+uv tool install --force --reinstall dist/sakura_iam_cli-0.9.0-py3-none-any.whl
 ```
 
 開発中はビルドせず、`./sakura-iam-cli`または`uv run sakura-iam-cli`を利用できます。現在のビルド成果物はPython wheelであり、依存関係を内包した単一バイナリではありません。
@@ -85,7 +85,7 @@ uv tool install --force dist/sakura_iam_cli-0.1.0-py3-none-any.whl
 シェル補完は`PATH`上の`sakura-iam-cli`を呼び出すため、リポジトリ内の`./sakura-iam-cli`ランチャーだけでは利用できません。最初にCLIをツールとしてインストールします。
 
 ```console
-uv tool install --force .
+uv tool install --force --reinstall .
 rehash
 command -v sakura-iam-cli
 sakura-iam-cli --install-completion
@@ -125,6 +125,12 @@ sakura-iam-cli
 ├── sp-key      サービスプリンシパルキー
 ├── api-key     プロジェクトAPIキー
 ├── iam-role    IAMロールの参照
+├── iam-policy  組織・フォルダ・プロジェクトのIAMポリシー
+├── id-role     IDロールの参照
+├── id-policy   組織IDポリシーの参照・更新
+├── organization 組織情報の参照・更新
+├── service-policy サービスポリシーの管理
+├── auth        認証コンテキスト・組織認証設定
 ├── project     プロジェクト
 ├── folder      フォルダ
 ├── resource    フォルダとプロジェクトのパス操作
@@ -212,6 +218,214 @@ sakura-iam-cli api-key update 111222333444 \
 sakura-iam-cli api-key delete 111222333444 --dry-run
 sakura-iam-cli api-key delete 111222333444
 ```
+
+## IAMポリシー
+
+組織、フォルダ、プロジェクトのいずれか1階層を指定してIAMポリシーを取得します。
+
+```console
+sakura-iam-cli iam-policy get --organization
+sakura-iam-cli iam-policy get --folder-id 112000000000
+sakura-iam-cli iam-policy get --project-id 123456789012
+```
+
+取得結果を編集し、同じ階層のIAMポリシー全体を置き換えます。更新前に`--dry-run`で対象階層とJSONを確認してください。
+
+```console
+sakura-iam-cli iam-policy get --project-id 123456789012 > iam-policy.json
+sakura-iam-cli iam-policy update iam-policy.json \
+  --project-id 123456789012 --dry-run
+sakura-iam-cli iam-policy update iam-policy.json \
+  --project-id 123456789012
+```
+
+```json
+{
+  "bindings": [
+    {
+      "role": {"type": "preset", "id": "owner"},
+      "principals": [
+        {"type": "user", "id": 111111111111},
+        {"type": "group", "id": 1},
+        {"type": "service-principal", "id": 222222222222}
+      ]
+    }
+  ]
+}
+```
+
+空の`bindings`を更新すると、その階層に直接設定されたIAMポリシーがすべて解除されます。上位階層から継承された権限は変更されません。
+
+対話形式でユーザまたはサービスプリンシパルへIAMロールを追加する場合は`add`を使います。
+
+```console
+sakura-iam-cli iam-policy add
+sakura-iam-cli iam-policy add --organization
+sakura-iam-cli iam-policy add --folder-id 112000000000
+sakura-iam-cli iam-policy add --project-id 123456789012
+sakura-iam-cli iam-policy add --project-id 123456789012 --dry-run
+```
+
+対話画面では次の順に複数選択します。
+
+1. 対象階層（組織／フォルダ／プロジェクト）
+2. 対象フォルダまたはプロジェクト
+3. プリンシパル種別（サービスプリンシパル／ユーザ）
+4. 追加するサービスプリンシパルまたはユーザ
+5. 割り当てるIAMロール
+6. 更新内容の確認
+
+上下キーで移動し、Spaceで`[ ]`と`[x]`を切り替え、Enterで確定します。`--organization`、`--folder-id`、`--project-id`のいずれかを指定した場合は、対象階層の選択を省略できます。対象階層へ付与できないIAMロールは候補に表示されません。
+
+選択した全プリンシパルに割り当て済みのIAMロールは、最初から`[x]`になります。複数選択のうち一部だけに割り当て済みの場合は「一部割当済み」と表示し、意図しない権限拡大を避けるため未選択にします。このコマンドは追加専用なので、既存ロールのチェックを外しても割り当ては削除されません。現在のIAMポリシーは保持され、選択した組み合わせだけが重複なく追加されます。`--dry-run`では一覧と現在のポリシーを取得して選択画面を表示しますが、更新APIは呼び出しません。
+
+割り当てを対話形式で削除する場合は`delete`を使います。
+
+```console
+sakura-iam-cli iam-policy delete
+sakura-iam-cli iam-policy delete --organization
+sakura-iam-cli iam-policy delete --folder-id 112000000000
+sakura-iam-cli iam-policy delete --project-id 123456789012 --dry-run
+```
+
+対象階層を選んだ後、その階層でIAMロールが直接割り当てられているSP／ユーザだけが候補に表示されます。プリンシパルを選ぶと、その対象に割り当てられているロールだけを削除候補として表示します。複数対象の一部だけが持つロールには「一部のみ割当済み」と表示されます。
+
+削除候補のロールは安全のためすべて未選択で開始します。選択したプリンシパルとロールの組み合わせだけを削除し、空になったbindingは自動的に取り除きます。上位階層から継承された割り当てはこの操作の対象になりません。
+
+## IDポリシーとIDロール
+
+利用可能なIDロールを参照します。
+
+```console
+sakura-iam-cli id-role list --per-page 100
+sakura-iam-cli id-role get identity-admin
+```
+
+組織のIDポリシーを取得、またはJSONファイルの内容で置き換えます。`update`はポリシー全体を置き換えるため、先に現在の内容を保存して編集してください。
+
+```console
+sakura-iam-cli id-policy get > id-policy.json
+sakura-iam-cli id-policy update id-policy.json --dry-run
+sakura-iam-cli id-policy update id-policy.json
+```
+
+入力JSONの形式:
+
+```json
+{
+  "bindings": [
+    {
+      "role": {"type": "preset", "id": "identity-admin"},
+      "principals": [
+        {"type": "user", "id": 111111111111},
+        {"type": "group", "id": 1},
+        {"type": "service-principal", "id": 222222222222}
+      ]
+    }
+  ]
+}
+```
+
+## 組織とサービスポリシー
+
+組織情報を参照し、組織名を更新します。
+
+```console
+sakura-iam-cli organization get
+sakura-iam-cli organization update --name "新しい組織名" --dry-run
+sakura-iam-cli organization update --name "新しい組織名"
+```
+
+サービスポリシーの状態と利用可能なルールテンプレートを確認し、有効化または無効化します。
+
+```console
+sakura-iam-cli service-policy status
+sakura-iam-cli service-policy templates --per-page 100
+sakura-iam-cli service-policy enable --dry-run
+sakura-iam-cli service-policy enable
+sakura-iam-cli service-policy disable --dry-run
+```
+
+設定済みルールを取得し、JSONファイルで指定したルールを更新します。`--rules-dry-run`はAPI上でドライラン状態のルールを絞り込むオプションです。`update --dry-run`はローカル検証だけを行い、APIへ送信しません。
+
+```console
+sakura-iam-cli service-policy list > service-policy.json
+sakura-iam-cli service-policy list --active --type list
+sakura-iam-cli service-policy update service-policy.json --dry-run
+sakura-iam-cli service-policy update service-policy.json
+```
+
+更新ファイルの`rules`には更新対象だけを指定できます。`service-policy list`の出力をそのまま編集した場合、参照専用の`name`は送信時に自動的に除外されます。
+
+```json
+{
+  "rules": [
+    {
+      "code": "cloud-restrict-zone",
+      "spec": {
+        "contents": [
+          {
+            "allow_all": false,
+            "deny_all": false,
+            "values": {"allowed_values": ["is:is1a"]}
+          }
+        ]
+      },
+      "is_active": true,
+      "is_dry_run": false
+    }
+  ]
+}
+```
+
+## 認証設定
+
+現在のサービスプリンシパルの認証種別、リソースID、操作可能なプロジェクトIDを確認します。
+
+```console
+sakura-iam-cli auth context
+```
+
+組織のパスワードポリシーを取得し、JSONファイルで更新します。
+
+```console
+sakura-iam-cli auth password-policy > password-policy.json
+sakura-iam-cli auth update-password-policy password-policy.json --dry-run
+sakura-iam-cli auth update-password-policy password-policy.json
+```
+
+```json
+{
+  "min_length": 12,
+  "require_uppercase": true,
+  "require_lowercase": true,
+  "require_symbols": true
+}
+```
+
+送信元IPv4ネットワーク、2要素認証必須化、ログイン可能期間を含む認証条件を取得・更新します。
+
+```console
+sakura-iam-cli auth conditions > auth-conditions.json
+sakura-iam-cli auth update-conditions auth-conditions.json --dry-run
+sakura-iam-cli auth update-conditions auth-conditions.json
+```
+
+```json
+{
+  "ip_restriction": {
+    "mode": "allow_list",
+    "source_network": ["192.0.2.0/24"]
+  },
+  "require_two_factor_auth": {"enabled": true},
+  "datetime_restriction": {
+    "after": null,
+    "before": null
+  }
+}
+```
+
+認証条件を誤ると管理者自身がログインできなくなる可能性があります。更新前に取得結果を保存し、`--dry-run`で入力を検証してください。
 
 ## プロジェクト
 

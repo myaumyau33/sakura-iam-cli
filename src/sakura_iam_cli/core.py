@@ -121,7 +121,11 @@ def request_iam(
 ) -> dict[str, Any]:
     url = urllib.parse.urljoin(profile.base_url, path.lstrip("/"))
     if query:
-        values = {key: value for key, value in query.items() if value is not None}
+        values = {
+            key: str(value).lower() if isinstance(value, bool) else value
+            for key, value in query.items()
+            if value is not None
+        }
         if values:
             url = f"{url}?{urllib.parse.urlencode(values)}"
     data = None if json_body is None else json.dumps(json_body).encode()
@@ -332,6 +336,229 @@ def read_iam_role(profile: Profile, token: str, iam_role_id: str) -> dict[str, A
         token,
         "GET",
         f"iam-roles/{urllib.parse.quote(iam_role_id, safe='')}",
+    )
+
+
+def list_id_roles(
+    profile: Profile,
+    token: str,
+    *,
+    page: int | None = None,
+    per_page: int | None = None,
+) -> dict[str, Any]:
+    return request_iam(
+        profile,
+        token,
+        "GET",
+        "id-roles",
+        query={"page": page, "per_page": per_page},
+    )
+
+
+def read_id_role(profile: Profile, token: str, id_role_id: str) -> dict[str, Any]:
+    return request_iam(
+        profile,
+        token,
+        "GET",
+        f"id-roles/{urllib.parse.quote(id_role_id, safe='')}",
+    )
+
+
+def read_organization_id_policy(profile: Profile, token: str) -> dict[str, Any]:
+    return request_iam(profile, token, "GET", "organization-id-policy")
+
+
+def update_organization_id_policy(
+    profile: Profile, token: str, bindings: list[dict[str, Any]]
+) -> dict[str, Any]:
+    return request_iam(
+        profile,
+        token,
+        "PUT",
+        "organization-id-policy",
+        json_body={"bindings": bindings},
+    )
+
+
+def read_organization_iam_policy(profile: Profile, token: str) -> dict[str, Any]:
+    return request_iam(profile, token, "GET", "organization-iam-policy")
+
+
+def update_organization_iam_policy(
+    profile: Profile, token: str, bindings: list[dict[str, Any]]
+) -> dict[str, Any]:
+    return request_iam(
+        profile,
+        token,
+        "PUT",
+        "organization-iam-policy",
+        json_body={"bindings": bindings},
+    )
+
+
+def read_folder_iam_policy(
+    profile: Profile, token: str, folder_id: str
+) -> dict[str, Any]:
+    return request_iam(
+        profile, token, "GET", f"folders/{int(folder_id)}/iam-policy"
+    )
+
+
+def update_folder_iam_policy(
+    profile: Profile,
+    token: str,
+    folder_id: str,
+    bindings: list[dict[str, Any]],
+) -> dict[str, Any]:
+    return request_iam(
+        profile,
+        token,
+        "PUT",
+        f"folders/{int(folder_id)}/iam-policy",
+        json_body={"bindings": bindings},
+    )
+
+
+def read_project_iam_policy(
+    profile: Profile, token: str, project_id: str
+) -> dict[str, Any]:
+    return request_iam(
+        profile, token, "GET", f"projects/{int(project_id)}/iam-policy"
+    )
+
+
+def update_project_iam_policy(
+    profile: Profile,
+    token: str,
+    project_id: str,
+    bindings: list[dict[str, Any]],
+) -> dict[str, Any]:
+    return request_iam(
+        profile,
+        token,
+        "PUT",
+        f"projects/{int(project_id)}/iam-policy",
+        json_body={"bindings": bindings},
+    )
+
+
+def read_organization(profile: Profile, token: str) -> dict[str, Any]:
+    return request_iam(profile, token, "GET", "organization")
+
+
+def update_organization(profile: Profile, token: str, name: str) -> dict[str, Any]:
+    return request_iam(
+        profile, token, "PUT", "organization", json_body={"name": name}
+    )
+
+
+def get_service_policy_status(profile: Profile, token: str) -> dict[str, Any]:
+    return request_iam(profile, token, "GET", "service-policy-status")
+
+
+def enable_service_policy(profile: Profile, token: str) -> None:
+    request_iam(profile, token, "POST", "enable-service-policy")
+
+
+def disable_service_policy(profile: Profile, token: str) -> None:
+    request_iam(profile, token, "POST", "disable-service-policy")
+
+
+def list_service_policy_rule_templates(
+    profile: Profile,
+    token: str,
+    *,
+    page: int | None = None,
+    per_page: int | None = None,
+    name: str | None = None,
+    code: str | None = None,
+    rule_type: str | None = None,
+) -> dict[str, Any]:
+    return request_iam(
+        profile,
+        token,
+        "GET",
+        "service-policy-rule-templates",
+        query={
+            "page": page,
+            "per_page": per_page,
+            "name": name,
+            "code": code,
+            "type": rule_type,
+        },
+    )
+
+
+def list_organization_service_policy_rules(
+    profile: Profile,
+    token: str,
+    *,
+    is_active: bool | None = None,
+    is_dry_run: bool | None = None,
+    name: str | None = None,
+    code: str | None = None,
+    rule_type: str | None = None,
+) -> dict[str, Any]:
+    return request_iam(
+        profile,
+        token,
+        "GET",
+        "organization-service-policy",
+        query={
+            "is_active": is_active,
+            "is_dry_run": is_dry_run,
+            "name": name,
+            "code": code,
+            "type": rule_type,
+        },
+    )
+
+
+def update_organization_service_policy_rules(
+    profile: Profile, token: str, rules: list[dict[str, Any]]
+) -> dict[str, Any]:
+    return request_iam(
+        profile,
+        token,
+        "PUT",
+        "organization-service-policy",
+        json_body={"rules": rules},
+    )
+
+
+def read_auth_context(profile: Profile, token: str) -> dict[str, Any]:
+    return request_iam(profile, token, "GET", "auth/context")
+
+
+def read_password_policy(profile: Profile, token: str) -> dict[str, Any]:
+    return request_iam(profile, token, "GET", "organization-password-policy")
+
+
+def update_password_policy(
+    profile: Profile, token: str, policy: dict[str, Any]
+) -> dict[str, Any]:
+    return request_iam(
+        profile,
+        token,
+        "PUT",
+        "organization-password-policy",
+        json_body=policy,
+    )
+
+
+def read_auth_conditions(profile: Profile, token: str) -> dict[str, Any]:
+    return request_iam(profile, token, "GET", "organization-auth-conditions")
+
+
+def update_auth_conditions(
+    profile: Profile, token: str, conditions: dict[str, Any]
+) -> dict[str, Any]:
+    return request_iam(
+        profile,
+        token,
+        "PUT",
+        "organization-auth-conditions",
+        json_body=conditions,
     )
 
 
