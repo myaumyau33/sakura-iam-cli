@@ -9,6 +9,7 @@ import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 
+from sakura_iam_cli import core
 from sakura_iam_cli.core import (
     CliError,
     Profile,
@@ -16,7 +17,6 @@ from sakura_iam_cli.core import (
     generate_key_pairs,
     load_profile,
 )
-from sakura_iam_cli import core
 
 
 def decode_part(value: str) -> dict:
@@ -194,6 +194,31 @@ def test_project_api_key_requests(tmp_path: Path, monkeypatch):
     assert requests[4].full_url.endswith("/compat/api-keys/key%2F1")
     assert requests[5].full_url.endswith("/iam-roles?page=1&per_page=100")
     assert requests[6].full_url.endswith("/iam-roles/role%2F1")
+
+
+def test_scim_configuration_requests(tmp_path: Path, monkeypatch):
+    profile = Profile("https://example.test/iam/1.0/", "10", "sp", "kid", tmp_path / "key")
+    requests = []
+    monkeypatch.setattr(core, "_request_json", lambda request: requests.append(request) or {})
+
+    core.list_scim_configurations(profile, "token", page=2, per_page=25)
+    core.create_scim_configuration(profile, "token", "Microsoft Entra ID")
+    core.read_scim_configuration(profile, "token", "config/id")
+    core.update_scim_configuration(profile, "token", "config/id", "Renamed")
+    core.delete_scim_configuration(profile, "token", "config/id")
+    core.regenerate_scim_configuration_token(profile, "token", "config/id")
+
+    assert [request.method for request in requests] == [
+        "GET", "POST", "GET", "PUT", "DELETE", "POST"
+    ]
+    assert requests[0].full_url.endswith("/scim-configurations?page=2&per_page=25")
+    assert json.loads(requests[1].data) == {"name": "Microsoft Entra ID"}
+    assert requests[2].full_url.endswith("/scim-configurations/config%2Fid")
+    assert json.loads(requests[3].data) == {"name": "Renamed"}
+    assert requests[4].full_url.endswith("/scim-configurations/config%2Fid")
+    assert requests[5].full_url.endswith(
+        "/scim-configurations/config%2Fid/regenerate-token"
+    )
 
 
 def test_id_role_and_policy_requests(tmp_path: Path, monkeypatch):

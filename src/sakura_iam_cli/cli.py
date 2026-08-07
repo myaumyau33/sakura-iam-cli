@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import json
 import ipaddress
+import json
 import os
 from dataclasses import dataclass
 from datetime import datetime
@@ -9,8 +9,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Annotated
 
-import typer
 import questionary
+import typer
 from rich.console import Console
 from rich.table import Table
 
@@ -18,83 +18,88 @@ from .core import (
     CliError,
     Profile,
     change_service_principal_key_state,
-    create_project_api_key,
-    create_project,
+    clear_trusted_devices,
     create_folder,
     create_group,
-    create_user,
+    create_project,
+    create_project_api_key,
+    create_scim_configuration,
     create_service_principal,
-    delete_service_principal,
-    delete_project_api_key,
-    delete_project,
+    create_user,
+    deactivate_user_otp,
     delete_folder,
     delete_group,
-    delete_user,
+    delete_project,
+    delete_project_api_key,
+    delete_scim_configuration,
     delete_security_key,
-    delete_trusted_device,
-    disable_service_policy,
-    deactivate_user_otp,
-    clear_trusted_devices,
+    delete_service_principal,
     delete_service_principal_key,
+    delete_trusted_device,
+    delete_user,
+    disable_service_policy,
+    enable_service_policy,
     generate_key_pairs,
     get_service_policy_status,
-    enable_service_policy,
     issue_access_token,
-    list_service_principal_keys,
-    list_service_principals,
-    list_project_api_keys,
-    list_projects,
     list_folders,
-    list_groups,
     list_group_memberships,
-    list_users,
-    list_security_keys,
-    list_trusted_devices,
+    list_groups,
     list_iam_roles,
     list_id_roles,
     list_organization_service_policy_rules,
+    list_project_api_keys,
+    list_projects,
+    list_scim_configurations,
+    list_security_keys,
     list_service_policy_rule_templates,
+    list_service_principal_keys,
+    list_service_principals,
+    list_trusted_devices,
+    list_users,
     load_profile,
-    move_projects,
     move_folders,
-    read_service_principal,
-    read_project_api_key,
-    read_project,
-    read_folder,
-    read_group,
-    read_user,
-    read_security_key,
-    register_user_email,
-    unregister_user_email,
-    read_iam_role,
-    read_id_role,
-    read_folder_iam_policy,
-    read_organization_iam_policy,
-    read_project_iam_policy,
+    move_projects,
     read_auth_conditions,
     read_auth_context,
-    read_password_policy,
-    read_organization_id_policy,
+    read_folder,
+    read_folder_iam_policy,
+    read_group,
+    read_iam_role,
+    read_id_role,
     read_organization,
-    update_service_principal,
-    update_project_api_key,
-    update_project,
+    read_organization_iam_policy,
+    read_organization_id_policy,
+    read_password_policy,
+    read_project,
+    read_project_api_key,
+    read_project_iam_policy,
+    read_scim_configuration,
+    read_security_key,
+    read_service_principal,
+    read_user,
+    regenerate_scim_configuration_token,
+    register_user_email,
+    unregister_user_email,
+    update_auth_conditions,
     update_folder,
+    update_folder_iam_policy,
     update_group,
     update_group_memberships,
-    update_user,
-    update_organization_id_policy,
-    update_folder_iam_policy,
-    update_organization_iam_policy,
-    update_project_iam_policy,
     update_organization,
+    update_organization_iam_policy,
+    update_organization_id_policy,
     update_organization_service_policy_rules,
-    update_auth_conditions,
     update_password_policy,
+    update_project,
+    update_project_api_key,
+    update_project_iam_policy,
+    update_scim_configuration,
+    update_service_principal,
+    update_user,
     upload_public_key,
 )
 from .resources import Resource, ResourceTree
-
 
 app = typer.Typer(help="A CLI wrapper for the Sakura Cloud IAM API.", no_args_is_help=True)
 sp_key_app = typer.Typer(help="Manage service principal keys.", no_args_is_help=True)
@@ -111,6 +116,7 @@ project_app = typer.Typer(help="Manage projects.", no_args_is_help=True)
 folder_app = typer.Typer(help="Manage folders.", no_args_is_help=True)
 group_app = typer.Typer(help="Manage groups and memberships.", no_args_is_help=True)
 user_app = typer.Typer(help="Manage users and user authentication devices.", no_args_is_help=True)
+provisioning_app = typer.Typer(help="Manage SCIM user provisioning.", no_args_is_help=True)
 resource_app = typer.Typer(help="Browse and move folders and projects by path.", no_args_is_help=True)
 app.add_typer(sp_key_app, name="sp-key")
 app.add_typer(sp_app, name="sp")
@@ -126,6 +132,7 @@ app.add_typer(project_app, name="project")
 app.add_typer(folder_app, name="folder")
 app.add_typer(group_app, name="group")
 app.add_typer(user_app, name="user")
+app.add_typer(provisioning_app, name="provisioning")
 app.add_typer(resource_app, name="resource")
 
 SettingsOption = Annotated[
@@ -1952,6 +1959,147 @@ def read_password(password_file: Path | None, *, required: bool) -> str | None:
     if not value:
         raise CliError("password must not be empty")
     return value
+
+
+@provisioning_app.command("list")
+def list_provisioning_configurations(
+    ctx: typer.Context,
+    page: Annotated[int | None, typer.Option("--page", min=1)] = None,
+    per_page: Annotated[int | None, typer.Option("--per-page", min=1)] = None,
+) -> None:
+    """List SCIM user provisioning configurations."""
+    try:
+        profile, token = authenticated(ctx)
+        print_json(
+            list_scim_configurations(
+                profile, token, page=page, per_page=per_page
+            )
+        )
+    except CliError as exc:
+        fail(exc)
+
+
+@provisioning_app.command("create")
+def create_provisioning_configuration(
+    ctx: typer.Context,
+    name: Annotated[str, typer.Option("--name")],
+    output: Annotated[
+        Path | None,
+        typer.Option(
+            "--output",
+            help="Save the response containing the secret token as mode 0600.",
+        ),
+    ] = None,
+) -> None:
+    """Create user provisioning. The secret token is returned only at creation."""
+    try:
+        profile, token = authenticated(ctx)
+        response = create_scim_configuration(profile, token, name)
+        if output is None:
+            print_json(response)
+        else:
+            write_sensitive_json(output, response)
+            print_json({"id": response.get("id"), "saved_to": str(output)})
+    except CliError as exc:
+        fail(exc)
+
+
+@provisioning_app.command("get")
+def get_provisioning_configuration(
+    ctx: typer.Context,
+    configuration_id: Annotated[
+        str, typer.Argument(help="User provisioning configuration ID.")
+    ],
+) -> None:
+    """Get one user provisioning configuration without its secret token."""
+    try:
+        profile, token = authenticated(ctx)
+        print_json(read_scim_configuration(profile, token, configuration_id))
+    except CliError as exc:
+        fail(exc)
+
+
+@provisioning_app.command("update")
+def update_provisioning_configuration(
+    ctx: typer.Context,
+    configuration_id: Annotated[
+        str, typer.Argument(help="User provisioning configuration ID.")
+    ],
+    name: Annotated[str, typer.Option("--name")],
+) -> None:
+    """Rename a user provisioning configuration."""
+    try:
+        profile, token = authenticated(ctx)
+        print_json(
+            update_scim_configuration(profile, token, configuration_id, name)
+        )
+    except CliError as exc:
+        fail(exc)
+
+
+@provisioning_app.command("delete")
+def delete_provisioning_configuration(
+    ctx: typer.Context,
+    configuration_id: Annotated[
+        str, typer.Argument(help="User provisioning configuration ID.")
+    ],
+    dry_run: Annotated[bool, typer.Option("--dry-run")] = False,
+) -> None:
+    """Delete a user provisioning configuration."""
+    if dry_run:
+        print_json(
+            {
+                "dry_run": True,
+                "id": configuration_id,
+                "status": "would_delete",
+            }
+        )
+        return
+    try:
+        profile, token = authenticated(ctx)
+        delete_scim_configuration(profile, token, configuration_id)
+        print_json({"id": configuration_id, "status": "deleted"})
+    except CliError as exc:
+        fail(exc)
+
+
+@provisioning_app.command("regenerate-token")
+def regenerate_provisioning_token(
+    ctx: typer.Context,
+    configuration_id: Annotated[
+        str, typer.Argument(help="User provisioning configuration ID.")
+    ],
+    output: Annotated[
+        Path | None,
+        typer.Option(
+            "--output",
+            help="Save the new secret token as mode 0600.",
+        ),
+    ] = None,
+    dry_run: Annotated[bool, typer.Option("--dry-run")] = False,
+) -> None:
+    """Replace the secret token, immediately invalidating the previous token."""
+    if dry_run:
+        print_json(
+            {
+                "dry_run": True,
+                "id": configuration_id,
+                "status": "would_regenerate_token",
+            }
+        )
+        return
+    try:
+        profile, token = authenticated(ctx)
+        response = regenerate_scim_configuration_token(
+            profile, token, configuration_id
+        )
+        if output is None:
+            print_json(response)
+        else:
+            write_sensitive_json(output, response)
+            print_json({"id": configuration_id, "saved_to": str(output)})
+    except CliError as exc:
+        fail(exc)
 
 
 @user_app.command("list")

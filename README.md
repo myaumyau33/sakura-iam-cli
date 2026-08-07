@@ -135,6 +135,7 @@ sakura-iam-cli
 ├── folder      フォルダ
 ├── resource    フォルダとプロジェクトのパス操作
 ├── group       ユーザグループと所属ユーザ
+├── provisioning SCIMユーザープロビジョニング
 └── user        ユーザ、メール、OTP、認証デバイス
 ```
 
@@ -545,6 +546,26 @@ sakura-iam-cli group set-members 1 --clear
 ```
 
 空指定による意図しない全解除を防ぐため、全ユーザを外す場合は`--clear`が必要です。
+
+## ユーザープロビジョニング
+
+外部IdPからユーザとグループを同期するSCIMユーザープロビジョニング設定を管理します。
+
+```console
+sakura-iam-cli provisioning list
+sakura-iam-cli provisioning create --name "Microsoft Entra ID" \
+  --output provisioning-credentials.json
+sakura-iam-cli provisioning get 550e8400-e29b-41d4-a716-446655440000
+sakura-iam-cli provisioning update 550e8400-e29b-41d4-a716-446655440000 \
+  --name "Microsoft Entra ID Production"
+sakura-iam-cli provisioning regenerate-token \
+  550e8400-e29b-41d4-a716-446655440000 \
+  --output regenerated-token.json --dry-run
+sakura-iam-cli provisioning delete \
+  550e8400-e29b-41d4-a716-446655440000 --dry-run
+```
+
+作成時に返るBase URLとシークレットトークンをIdPへ設定します。シークレットを含む応答は一度しか取得できないため、`--output`を指定すると新規ファイルへ`0600`で保存します。既存ファイルは上書きしません。トークン再発行は以前のトークンを即座に無効化するため、まず`--dry-run`で対象IDを確認してください。
 
 ## ユーザ
 

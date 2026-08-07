@@ -16,7 +16,6 @@ from typing import Any
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
 
-
 DEFAULT_BASE_URL = "https://secure.sakura.ad.jp/cloud/api/iam/1.0/"
 JWT_GRANT_TYPE = "urn:ietf:params:oauth:grant-type:jwt-bearer"
 
@@ -874,6 +873,80 @@ def update_group_memberships(
         "PUT",
         f"groups/{urllib.parse.quote(group_id, safe='')}/memberships",
         json_body={"compat_users": [{"id": int(user_id)} for user_id in user_ids]},
+    )
+
+
+def list_scim_configurations(
+    profile: Profile,
+    token: str,
+    *,
+    page: int | None = None,
+    per_page: int | None = None,
+) -> dict[str, Any]:
+    return request_iam(
+        profile,
+        token,
+        "GET",
+        "scim-configurations",
+        query={"page": page, "per_page": per_page},
+    )
+
+
+def create_scim_configuration(
+    profile: Profile, token: str, name: str
+) -> dict[str, Any]:
+    return request_iam(
+        profile,
+        token,
+        "POST",
+        "scim-configurations",
+        json_body={"name": name},
+    )
+
+
+def read_scim_configuration(
+    profile: Profile, token: str, configuration_id: str
+) -> dict[str, Any]:
+    return request_iam(
+        profile,
+        token,
+        "GET",
+        f"scim-configurations/{urllib.parse.quote(configuration_id, safe='')}",
+    )
+
+
+def update_scim_configuration(
+    profile: Profile, token: str, configuration_id: str, name: str
+) -> dict[str, Any]:
+    return request_iam(
+        profile,
+        token,
+        "PUT",
+        f"scim-configurations/{urllib.parse.quote(configuration_id, safe='')}",
+        json_body={"name": name},
+    )
+
+
+def delete_scim_configuration(
+    profile: Profile, token: str, configuration_id: str
+) -> None:
+    request_iam(
+        profile,
+        token,
+        "DELETE",
+        f"scim-configurations/{urllib.parse.quote(configuration_id, safe='')}",
+    )
+
+
+def regenerate_scim_configuration_token(
+    profile: Profile, token: str, configuration_id: str
+) -> dict[str, Any]:
+    return request_iam(
+        profile,
+        token,
+        "POST",
+        "scim-configurations/"
+        f"{urllib.parse.quote(configuration_id, safe='')}/regenerate-token",
     )
 
 
