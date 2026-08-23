@@ -220,6 +220,15 @@ sakura-iam-cli api-key delete 111222333444 --dry-run
 sakura-iam-cli api-key delete 111222333444
 ```
 
+作成時に保存した認証情報で Cloud API v1.1 の `GET /auth-status` を呼び出し、
+APIキーに紐づくプロジェクトや権限を確認できます。認証情報ファイルは `0600` である必要があります。
+
+```console
+sakura-iam-cli api-key auth-status ./work/automation-api-key.json --zone is1a
+```
+
+`--zone` は `tk1a`, `tk1b`, `is1a`, `is1b`, `is1c`, `tk1v` から選択します。
+
 ## IAMポリシー
 
 組織、フォルダ、プロジェクトのいずれか1階層を指定してIAMポリシーを取得します。

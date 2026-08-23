@@ -3,6 +3,7 @@ from __future__ import annotations
 import ipaddress
 import json
 import os
+import stat
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
@@ -40,6 +41,7 @@ from .core import (
     disable_service_policy,
     enable_service_policy,
     generate_key_pairs,
+    get_cloud_auth_status,
     get_service_policy_status,
     issue_access_token,
     list_folders,
@@ -166,6 +168,15 @@ class ApiKeyOrdering(str, Enum):
     name_desc = "-name"
 
 
+class CloudApiZone(str, Enum):
+    tk1a = "tk1a"
+    tk1b = "tk1b"
+    is1a = "is1a"
+    is1b = "is1b"
+    is1c = "is1c"
+    tk1v = "tk1v"
+
+
 class ProjectOrdering(str, Enum):
     code = "code"
     code_desc = "-code"
@@ -237,6 +248,38 @@ def load_key_records(key_dir: Path) -> list[tuple[Path, dict]]:
             raise CliError(f"upload record does not contain target service principal id: {path}")
         records.append((path, record))
     return records
+
+
+def load_api_key_credentials(path: Path) -> tuple[str, str]:
+    _validate_credentials_file(path)
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+        access_token = value["access_token"]
+        access_token_secret = value["access_token_secret"]
+    except FileNotFoundError as exc:
+        raise CliError(f"API key credentials file not found: {path}") from exc
+    except json.JSONDecodeError as exc:
+        raise CliError(f"invalid API key credentials JSON: {exc}") from exc
+    except (KeyError, TypeError) as exc:
+        raise CliError(
+            f"API key credentials file is missing a required setting: {exc}"
+        ) from exc
+    if not isinstance(access_token, str) or not isinstance(access_token_secret, str):
+        raise CliError("API key credentials must be strings")
+    return access_token, access_token_secret
+
+
+def _validate_credentials_file(path: Path) -> None:
+    try:
+        file_stat = path.stat()
+    except FileNotFoundError:
+        return
+    if not path.is_file():
+        raise CliError(f"API key credentials is not a regular file: {path}")
+    if os.name != "nt" and stat.S_IMODE(file_stat.st_mode) & 0o077:
+        raise CliError(
+            f"API key credentials permissions are too open: {path}; run chmod 600 {path}"
+        )
 
 
 def authenticated(ctx: typer.Context) -> tuple[Profile, str]:
@@ -430,6 +473,30 @@ def list_api_keys(
                 page=page,
                 per_page=per_page,
                 ordering=None if ordering is None else ordering.value,
+            )
+        )
+    except CliError as exc:
+        fail(exc)
+
+
+@api_key_app.command("auth-status")
+def api_key_auth_status(
+    credentials_file: Annotated[
+        Path,
+        typer.Argument(
+            help="Mode-0600 JSON file created by 'api-key create --output'."
+        ),
+    ],
+    zone: Annotated[
+        CloudApiZone, typer.Option("--zone", help="Cloud API zone endpoint.")
+    ] = CloudApiZone.is1a,
+) -> None:
+    """Get the Cloud API v1.1 authentication status of a project API key."""
+    try:
+        access_token, access_token_secret = load_api_key_credentials(credentials_file)
+        print_json(
+            get_cloud_auth_status(
+                access_token, access_token_secret, zone=zone.value
             )
         )
     except CliError as exc:

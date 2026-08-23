@@ -196,6 +196,27 @@ def test_project_api_key_requests(tmp_path: Path, monkeypatch):
     assert requests[6].full_url.endswith("/iam-roles/role%2F1")
 
 
+def test_cloud_auth_status_uses_basic_auth_and_zone(tmp_path: Path, monkeypatch):
+    requests = []
+    monkeypatch.setattr(
+        core, "_request_json", lambda request: requests.append(request) or {"is_ok": True}
+    )
+
+    response = core.get_cloud_auth_status("access", "secret", zone="tk1b")
+
+    assert response == {"is_ok": True}
+    assert requests[0].method == "GET"
+    assert requests[0].full_url == (
+        "https://secure.sakura.ad.jp/cloud/zone/tk1b/api/cloud/1.1/auth-status"
+    )
+    assert requests[0].headers["Authorization"] == "Basic YWNjZXNzOnNlY3JldA=="
+
+
+def test_cloud_auth_status_rejects_unknown_zone():
+    with pytest.raises(CliError, match="unsupported zone"):
+        core.get_cloud_auth_status("access", "secret", zone="invalid")
+
+
 def test_scim_configuration_requests(tmp_path: Path, monkeypatch):
     profile = Profile("https://example.test/iam/1.0/", "10", "sp", "kid", tmp_path / "key")
     requests = []

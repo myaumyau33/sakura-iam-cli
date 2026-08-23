@@ -141,6 +141,49 @@ def test_api_key_delete_dry_run_does_not_authenticate(monkeypatch):
     assert "would_delete" in result.stdout
 
 
+def test_api_key_auth_status_reads_created_credentials(tmp_path: Path, monkeypatch):
+    credentials = tmp_path / "api-key.json"
+    credentials.write_text(
+        json.dumps({"access_token": "access", "access_token_secret": "secret"})
+    )
+    credentials.chmod(0o600)
+    calls = []
+    monkeypatch.setattr(
+        cli,
+        "get_cloud_auth_status",
+        lambda *args, **kwargs: calls.append((args, kwargs))
+        or {"is_ok": True, "Account": {"ID": "123"}},
+    )
+
+    result = runner.invoke(
+        cli.app, ["api-key", "auth-status", str(credentials), "--zone", "tk1a"]
+    )
+
+    assert result.exit_code == 0
+    assert calls == [(('access', 'secret'), {"zone": "tk1a"})]
+    assert json.loads(result.stdout)["Account"]["ID"] == "123"
+
+
+def test_api_key_auth_status_rejects_open_credentials_file(
+    tmp_path: Path, monkeypatch
+):
+    credentials = tmp_path / "api-key.json"
+    credentials.write_text(
+        json.dumps({"access_token": "access", "access_token_secret": "secret"})
+    )
+    credentials.chmod(0o644)
+    monkeypatch.setattr(
+        cli,
+        "get_cloud_auth_status",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("requested")),
+    )
+
+    result = runner.invoke(cli.app, ["api-key", "auth-status", str(credentials)])
+
+    assert result.exit_code == 1
+    assert "permissions are too open" in result.stderr
+
+
 def test_provisioning_create_saves_secret_with_restricted_permissions(
     tmp_path: Path, monkeypatch
 ):
