@@ -17,6 +17,7 @@
 | ユーザ管理                 | 一覧、取得、作成、更新、削除、メール登録・解除、OTP解除、信頼済みデバイス・セキュリティキーの参照・削除 | `user`                    |
 | グループ管理               | 一覧、取得、作成、更新、削除、所属ユーザの参照・置換                                                    | `group`                   |
 | SCIM連携管理               | プロビジョニング設定の一覧、取得、作成、更新、削除、トークン再発行                                      | `provisioning`            |
+| SAML SSO連携管理            | SSOプロファイルの一覧、取得、作成、更新、削除、割り当て・解除                                           | `sso`                     |
 | 組織管理                   | 組織情報の取得、組織名の更新                                                                            | `organization`            |
 | サービスポリシー管理       | 状態確認、有効化・無効化、ルールテンプレート参照、ルール取得・更新                                      | `service-policy`          |
 | 認証設定管理               | 認証コンテキストの確認、パスワードポリシー・IP制限・2要素認証必須化・ログイン可能期間の取得・更新       | `auth`                    |
@@ -230,6 +231,35 @@ sakura-iam-cli group set-members 1 --user-id 111111111111 --user-id 222222222222
 ユーザ作成時のパスワードは非表示で対話入力します。ファイルから読む場合は`--password-file`を指定します。`group set-members`は所属ユーザ全体を置き換えます。全員を外す場合は`--clear`を指定してください。
 
 メール・OTP・信頼済みデバイス・セキュリティキーの操作は`sakura-iam-cli user --help`で確認できます。
+
+### SAML SSO連携
+
+外部IdPと連携するSSOプロファイルを、SP認証で管理します。
+
+```console
+sakura-iam-cli sso list --page 1 --per-page 100
+sakura-iam-cli sso create --name CompanySSO --description "社内ログイン"
+sakura-iam-cli sso get 1
+sakura-iam-cli sso update 1 \
+  --idp-entity-id https://idp.example.com/entity \
+  --idp-login-url https://idp.example.com/login \
+  --idp-certificate-file ./idp.crt
+sakura-iam-cli sso assign 1 --dry-run
+sakura-iam-cli sso assign 1
+```
+
+IdP情報は後から登録できます。`create`・`get`が返す`sp_entity_id`と`sp_acs_url`をIdP側に設定してください。`update`は現在の設定を取得し、指定項目だけを変更します。証明書はUTF-8のテキストファイルを`--idp-certificate-file`で指定するか、`--idp-certificate`へ直接渡せます。ログアウトURLは`--idp-logout-url`で指定し、空文字列で解除できます。
+
+`assign`は会員配下のクラウドユーザにSSOを適用します。同時に有効にできるプロファイルは1つです。解除と削除は別の操作です。
+
+```console
+sakura-iam-cli sso unassign 1 --dry-run
+sakura-iam-cli sso unassign 1
+sakura-iam-cli sso delete 1 --dry-run
+sakura-iam-cli sso delete 1
+```
+
+作成・更新・割り当て・解除・削除はすべて`--dry-run`でAPIを呼ばずに確認できます。`update --dry-run`では変更指定値だけを表示し、現在値の取得は行いません。権限の確認には`sp check-permissions --id-role identity-admin`を使えます。連携先IdPやユーザの設定については[公式SSOマニュアル](https://manual.sakura.ad.jp/cloud/controlpanel/settings/sso.html)を参照してください。
 
 ### 組織の設定とSCIM連携
 

@@ -8,6 +8,9 @@ app = typer.Typer(
 config_app = typer.Typer(
     help="Set up settings and manage local profiles.", no_args_is_help=True
 )
+sso_app = typer.Typer(
+    help="Manage SAML SSO profiles and their assignment.", no_args_is_help=True
+)
 sp_key_app = typer.Typer(help="Manage service principal keys.", no_args_is_help=True)
 sp_app = typer.Typer(help="Manage service principals.", no_args_is_help=True)
 api_key_app = typer.Typer(help="Manage project API keys.", no_args_is_help=True)

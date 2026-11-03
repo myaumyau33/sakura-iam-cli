@@ -29,6 +29,7 @@ EXPECTED_COMMANDS = {
     "resource": ["ls", "mkdir", "mv", "tree"],
     "service-policy": ["disable", "enable", "list", "status", "templates", "update"],
     "sp": ["check-permissions", "create", "delete", "get", "list", "token", "update"],
+    "sso": ["assign", "create", "delete", "get", "list", "unassign", "update"],
     "sp-key": ["create", "delete", "disable", "enable", "list", "upload-key"],
     "user": [
         "clear-trusted-devices",

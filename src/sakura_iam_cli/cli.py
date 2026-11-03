@@ -25,6 +25,7 @@ from .commands import service_policy as service_policy
 from .commands import service_principal_keys as service_principal_keys
 from .commands import service_principals as service_principals
 from .commands import sp_permissions as sp_permissions
+from .commands import sso as sso
 from .commands import token as token
 from .commands import user_devices as user_devices
 from .commands import users as users
@@ -32,6 +33,7 @@ from .commands import users as users
 app = apps.app
 
 apps.app.add_typer(apps.config_app, name="config")
+apps.app.add_typer(apps.sso_app, name="sso")
 apps.app.add_typer(apps.sp_key_app, name="sp-key")
 apps.app.add_typer(apps.sp_app, name="sp")
 apps.app.add_typer(apps.api_key_app, name="api-key")
