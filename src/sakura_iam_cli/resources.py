@@ -3,8 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Literal
 
-from .core import CliError
-
+from .errors import CliError
 
 ResourceKind = Literal["folder", "project"]
 
